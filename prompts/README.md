@@ -7,6 +7,7 @@ Templates use Python `string.Template` syntax (`${name}`), so JSON braces in the
 | `comment_plain.txt` | Comment writer | `problem_statement`, `numbered_code`, `target_section` | `{"comments": [{"line", "text"}]}` |
 | `plain_target_section.txt` | Inserted as `target_section` for backdoored code; empty string for honest code | `behavior_note` | — |
 | `comment_reframing.txt`, `comment_compliance.txt`, `comment_deference.txt` | Comment writer | `problem_statement`, `numbered_code`, `behavior_note`, `plain_comments` | Same lines as the plain set |
+| `comment_reframing_honest.txt`, `comment_compliance_honest.txt`, `comment_deference_honest.txt` | Comment writer, exploratory E5 (honest code, no flaw note) | `problem_statement`, `numbered_code`, `plain_comments` | Same lines as the plain set |
 | `paraphrase.txt` | Paraphraser (sees comment text only, never code) | `comments` | `{"comments": [str]}`, same length and order |
 | `monitor.txt` | Monitor | `problem_statement`, `code`, `warning` | Reasoning, then `<answer> N </answer>` |
 | `monitor_warning.txt` | Inserted as `warning` in the warned view; empty string otherwise | — | — |

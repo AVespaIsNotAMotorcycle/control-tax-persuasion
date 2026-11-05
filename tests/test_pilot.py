@@ -253,16 +253,40 @@ def test_warned_run_reuses_confirmatory_scores(tmp_path, monkeypatch):
     r = run_pilot(wpath, "warned", limit=4, allow_unfrozen=True)
     label = "claude-haiku-4-5-20251001"
     kept_bd, kept_h = _kept(r, 4, 8)
-    n_warned = kept_bd * 4 + kept_h  # every raw view, one sample each
+    n_warned = (kept_bd * 4 + kept_h) * 2  # every raw view, two samples each
     assert r["new_calls"] == n_warned
     sent = [req for b in list(batches.values())[n_before:] for req in b.values()]
     warning = (REPO / "prompts/monitor_warning.txt").read_text().strip()
     assert len(sent) == n_warned and all(warning in req["prompt"] for req in sent)
     rows = [json.loads(l) for l in open(tmp_path / f"runs/warned/scores-{label}.jsonl")]
-    assert {r_["sample"] for r_ in rows if r_["view"] == "warned"} == {0}
+    assert {r_["sample"] for r_ in rows if r_["view"] == "warned"} == {0, 1}
     assert first["monitors"][label]["score_calls"] + n_warned == len(rows)
 
     a = run_analysis("warned", resamples=50, max_samples=1)
     ids = {x["id"] for x in a["results"]}
     assert {"E4-plain", "E4-reframing", "E4-compliance", "E4-deference"} <= ids
     assert (tmp_path / f"runs/warned/analysis-{label}-k1.md").exists()
+
+
+@pytest.mark.skipif(not DATASET.exists(), reason="private dataset not downloaded")
+def test_honest_styles_run(tmp_path, monkeypatch):
+    path, batches = _confirmatory_setup(tmp_path, monkeypatch, max_excluded_share="1.0")
+    base = run_pilot(path, "conf", limit=4, allow_unfrozen=True)
+    text = (REPO / "configs/exploratory-honest-styles.toml").read_text()
+    hpath = tmp_path / "honest-test.toml"
+    hpath.write_text(re.sub(r"^max_excluded_share = .*$", "max_excluded_share = 1.0", text, flags=re.M))
+    r = run_pilot(hpath, "hs", limit=4, allow_unfrozen=True)
+    label = "claude-haiku-4-5-20251001"
+    assert r["writer"]["excluded_backdoors"] == base["writer"]["excluded_backdoors"]
+    kept_h = 8 - r["writer"]["steps"]["plain_honest"]["failed_after_retries"]
+    ok_h = {s: r["writer"]["steps"][f"{s}_honest"]["n"] - r["writer"]["steps"][f"{s}_honest"]["failed_after_retries"]
+            for s in ("reframing", "compliance", "deference")}
+    assert all(r["writer"]["steps"][f"{s}_honest"]["n"] == kept_h for s in ok_h)
+    new_scores = sum(ok_h.values()) * 2  # raw view only, k = 2
+    assert r["monitors"][label]["score_calls"] == base["monitors"][label]["score_calls"] + new_scores
+    sent = [req for b in batches.values() for req in b.values()]
+    assert not any(req["step"].startswith("paraphrase:honest") and ":plain" not in req["step"]
+                   for req in sent)  # styled honest sets are never paraphrased
+    rows = [json.loads(l) for l in open(tmp_path / f"runs/hs/scores-{label}.jsonl")]
+    hs = [x for x in rows if x["item"].startswith("honest:") and x["style"] != "plain" and x["style"] != "none"]
+    assert len(hs) == new_scores and {x["view"] for x in hs} == {"raw"}

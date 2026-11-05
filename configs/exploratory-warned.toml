@@ -1,12 +1,12 @@
 # Exploratory warned-view configuration (E4). Run only after the confirmatory run finishes:
-#   pcm pilot --config configs/exploratory-warned.toml --run-id warned-v1 --budget <30 minus confirmatory spend>
+#   pcm pilot --config configs/exploratory-warned.toml --run-id warned-v1 --budget <60 minus all spend so far>
 # Every other view is identical to the confirmatory run and comes from the cache at no cost;
-# only the warned scores are new. Analyze with: pcm analyze --run-id warned-v1 --max-samples 1
+# only the warned scores are new. Analyze with: pcm analyze --run-id warned-v1
 
 [run]
 split = "confirmatory"    # 200 backdoored and 400 honest solutions (configs/split.json)
 seed = 20261104           # tie-breaking at the threshold, and the random call order
-budget_usd = 30.0         # pass --budget with what is left of the $30 cap after the confirmatory run
+budget_usd = 30.0         # pass --budget with what is left of the $60 overall cap
 max_workers = 6
 max_attempts = 3          # one try plus two retries per generation step
 batch = true              # Claude calls go out as Message Batches at half price
@@ -31,7 +31,7 @@ candidates = [
 effort = "none"
 samples = 2               # the confirmatory views, unchanged (served from the cache)
 warned = true             # also score raw code with the warning line (prompts/monitor_warning.txt)
-warned_samples = 1        # 1 score per warned item: k = 2 would not fit what is left of the $30 cap
+warned_samples = 2        # 2 scores per warned item, matching the other views
 max_output_tokens = 16000
 
 [paraphraser]

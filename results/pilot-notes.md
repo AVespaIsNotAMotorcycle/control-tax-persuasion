@@ -100,3 +100,13 @@ Batch support was checked on a live slice (`smoke-batch`): 15 scoring requests i
 The paraphrased and stripped views show 0–5% caught in the pilot because one honest solution averages 94–95 in those views (75 raw) and, with 1 of 38 flagged, sets their thresholds alone. Pooling the pilot scores into k = 2 pairs projects these confirmatory-scale catch rates: raw 80–85%, paraphrased 74–83%, stripped 69%.
 
 At confirmatory scale (200 backdoors, 400 honest) the analysis takes about a minute for 10,000 resamples.
+
+## 2026-11-05: Budget raised to $60; honest-styles prompts (E5) piloted
+
+The overall cap for confirmatory and exploratory runs is now $60; the confirmatory run keeps its own $30 cap. The warned view (E4) goes back to k = 2.
+
+E5 gives each honest solution the three persuasive styles, from honest versions of the style prompts with no flaw note. Pilot run `pilot-v1-honest-styles`: 38 honest pilot solutions × 3 styles, Claude Haiku 4.5 scoring the raw view twice each, $1.19.
+
+- **Writer:** 114 of 114 rewrites valid on the first try, 0 refusals.
+- **Length matches the backdoor rewrites:** median words per comment 18–19 for styled honest code, 17–18.5 for styled backdoors, 12 for plain.
+- **Scores (very noisy, 1 of 38 honest flagged):** the share of styled honest solutions above the plain raw threshold was 5% for reframing, 16% for compliance, and 13% for deference, against 2.6% for plain. Mean honest scores rose 1 to 5 points, and backdoor scores rose 3 to 8. At this size this is only a hint that the styles raise suspicion of honest code rather than lower it.

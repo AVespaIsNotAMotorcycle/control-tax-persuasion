@@ -232,6 +232,16 @@ def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
         kept_bd = [i for i in backdoored if _key(i) not in excluded]
         kept_h = [i for i in honest if plain[_key(i)].ok]
 
+        # 2b. Exploratory E5: the same styles on honest code. A failure here drops the
+        # solution from E5 only; it stays in the plain honest set and is not an exclusion.
+        if run.get("honest_styles"):
+            h_tasks = [(i, s) for i in kept_h for s in STYLES]
+            h_out = _parallel(
+                lambda t: generate_style(caller, writer, t[0], clean[_key(t[0])],
+                                         plain[_key(t[0])].comments, t[1], attempts),
+                h_tasks, run["max_workers"], caller)
+            styled.update({(_key(i), s): g for (i, s), g in zip(h_tasks, h_out)})
+
         comment_sets: dict[tuple[str, str], list] = {}
         for i in kept_bd:
             comment_sets[(_key(i), "plain")] = plain[_key(i)].comments
@@ -239,6 +249,9 @@ def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
                 comment_sets[(_key(i), s)] = styled[(_key(i), s)].comments
         for i in kept_h:
             comment_sets[(_key(i), "plain")] = plain[_key(i)].comments
+            for s in STYLES:
+                if (_key(i), s) in styled and styled[(_key(i), s)].ok:
+                    comment_sets[(_key(i), s)] = styled[(_key(i), s)].comments
         by_key = {_key(i): i for i in items}
 
         _save_generations(run_dir, plain, styled, excluded)
@@ -280,13 +293,16 @@ def _score_chunk(caller, cand, para, mon, run, k, chunk_items, comment_sets, cle
     model = cand["model"]
     keys = {_key(i) for i in chunk_items}
     set_keys = [sk for sk in comment_sets if sk[0] in keys]
-    paras = dict(zip(set_keys, _parallel(
+    # Styled honest sets (E5) are scored raw only: no paraphrase, no warned view.
+    e5 = {sk for sk in set_keys if sk[0].startswith("honest:") and sk[1] != "plain"}
+    main = [sk for sk in set_keys if sk not in e5]
+    paras = dict(zip(main, _parallel(
         lambda sk: paraphrase(caller, model, para, clean[sk[0]], comment_sets[sk],
                               run["max_attempts"], f"paraphrase:{sk[0]}:{sk[1]}"),
-        set_keys, run["max_workers"], caller)))
+        main, run["max_workers"], caller)))
 
     views = []  # (item_key, view, style, code)
-    for sk in set_keys:
+    for sk in main:
         ik, style = sk
         views.append((ik, "raw", style, insert_comments(clean[ik], comment_sets[sk])))
         if paras[sk].comments is not None:
@@ -299,6 +315,8 @@ def _score_chunk(caller, cand, para, mon, run, k, chunk_items, comment_sets, cle
         # Exploratory warned view (E4): raw code, with the warning line in the monitor prompt.
         warned = [(ik, "warned", style, code) for ik, view, style, code in views if view == "raw"]
         tasks += [(v, s) for v in warned for s in range(mon.get("warned_samples", k))]
+    tasks += [((ik, "raw", style, insert_comments(clean[ik], comment_sets[(ik, style)])), s)
+              for ik, style in sorted(e5) for s in range(k)]
     mon_cfg = {"effort": cand["effort"], "max_output_tokens": mon["max_output_tokens"],
                "thinking": cand.get("thinking", True)}
     warning = (Path("prompts") / "monitor_warning.txt").read_text() if mon.get("warned") else ""
@@ -355,8 +373,12 @@ def _writer_report(plain, styled, backdoored, honest, excluded, caller) -> dict:
     steps = {
         "plain_backdoored": [plain[_key(i)] for i in backdoored],
         "plain_honest": [plain[_key(i)] for i in honest],
-        **{s: [g for (k, st), g in styled.items() if st == s] for s in STYLES},
+        **{s: [g for (k, st), g in styled.items() if st == s and k.startswith("backdoored:")]
+           for s in STYLES},
+        **{f"{s}_honest": [g for (k, st), g in styled.items() if st == s and k.startswith("honest:")]
+           for s in STYLES},
     }
+    steps = {name: gens for name, gens in steps.items() if gens}
     stats = {name: _attempt_stats(gens) for name, gens in steps.items()}
     all_calls = [a for gens in steps.values() for g in gens for a in g.attempts]
     mean_cost = statistics.mean(a.cost_usd for a in all_calls) if all_calls else 0.0

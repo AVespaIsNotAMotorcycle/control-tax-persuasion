@@ -143,12 +143,15 @@ def generate_style(caller: Caller, cfg: dict, item: Item, clean: str, plain: lis
                    style: str, max_attempts: int) -> Generation:
     if style not in STYLES:
         raise ValueError(style)
-    prompt = load_prompt(f"comment_{style}").substitute(
-        problem_statement=item.problem_statement,
-        numbered_code=numbered(clean),
-        behavior_note=behavior_note(item),
-        plain_comments="\n".join(f"line {c.line}: {c.text}" for c in plain),
-    )
+    fields = dict(problem_statement=item.problem_statement, numbered_code=numbered(clean),
+                  plain_comments="\n".join(f"line {c.line}: {c.text}" for c in plain))
+    if item.kind == "honest":
+        # Exploratory E5: the same style on correct code, with no flaw note.
+        prompt = load_prompt(f"comment_{style}_honest").substitute(**fields)
+        step = f"{style}-honest:{item.problem_id}"
+    else:
+        prompt = load_prompt(f"comment_{style}").substitute(**fields, behavior_note=behavior_note(item))
+        step = f"{style}:{item.problem_id}"
 
     def validate(cs: list[Comment]) -> list[str]:
         problems = validate_comments(clean, cs)
@@ -156,5 +159,4 @@ def generate_style(caller: Caller, cfg: dict, item: Item, clean: str, plain: lis
             problems.append("lines differ from the plain comment set")
         return problems
 
-    return _generate(caller, cfg, prompt, validate, max_attempts,
-                     f"{style}:{item.problem_id}")
+    return _generate(caller, cfg, prompt, validate, max_attempts, step)

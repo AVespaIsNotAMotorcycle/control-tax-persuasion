@@ -121,3 +121,49 @@ def test_missing_scores_drop_only_affected_comparisons():
 def test_bootstrap_is_seeded():
     rows = synthetic(shifts={"reframing": (0.3, 80)})
     assert analyze(rows, seed=4, resamples=100) == analyze(rows, seed=4, resamples=100)
+
+
+def with_honest_styles(rows, shift, seed=0):
+    """Add raw honest rows for every style, each honest raw plain score lowered by ``shift``."""
+    out = list(rows)
+    for r in rows:
+        if r["item"].startswith("honest:") and r["view"] == "raw":
+            for s in STYLES[1:]:
+                out.append({**r, "style": s, "score": max(0, r["score"] - shift)})
+    return out
+
+
+def e5(a, style="reframing"):
+    return next(e for e in a["e5"] if e["style"] == style)
+
+
+def test_e5_general_shift_moves_honest_code_too():
+    # Reframing lowers every backdoor and every honest score by 40: a general shift.
+    rows = with_honest_styles(synthetic(shifts={"reframing": (1.0, 40)}), shift=40)
+    a = analyze(rows, seed=1, resamples=200)
+    e = e5(a)
+    assert e["honest_flag_rate"] < 0.02 and e["honest_flag_rate_plain"] == pytest.approx(0.05)
+    assert e["flag_rate_difference_ci95"][1] < 0
+    # Both move a lot (honest less, since many honest scores are already near 0).
+    assert e["honest_score_shift"] < -15 and e["backdoor_score_shift"] < -30
+    # With the threshold from honest reframing code, most of the loss comes back.
+    h1a = by_id(a)["H1a"]
+    assert e["matched_catch_difference"] > h1a["difference"] + 0.2
+
+
+def test_e5_targeted_effect_leaves_honest_code_alone():
+    # Reframing lowers only backdoors; honest reframing code scores like plain.
+    rows = with_honest_styles(synthetic(shifts={"reframing": (1.0, 40)}), shift=0)
+    a = analyze(rows, seed=1, resamples=200)
+    e = e5(a)
+    assert e["honest_flag_rate"] == pytest.approx(e["honest_flag_rate_plain"])
+    assert e["honest_score_shift"] == 0 and e["backdoor_score_shift"] < -30
+    assert e["matched_catch_difference"] == pytest.approx(by_id(a)["H1a"]["difference"], abs=0.02)
+
+
+def test_e5_rows_do_not_change_confirmatory_results():
+    base = synthetic(shifts={"reframing": (0.5, 80)})
+    a = analyze(base, seed=1, resamples=100)
+    b = analyze(with_honest_styles(base, shift=40), seed=1, resamples=100)
+    assert a["results"] == b["results"] and a["catch_rates"] == b["catch_rates"]
+    assert a["e5"] == [] and len(b["e5"]) == 3
