@@ -4,13 +4,13 @@ Nov 4, 2026 · @Sasha
 
 ## Summary
 
-This study tests whether persuasive comments lower an AI monitor's backdoor catch rate when the code's behavior stays identical. It also tests whether stripping or paraphrasing comments restores that catch rate.
+This study tests whether persuasive comments change an AI monitor's backdoor catch rate when the code's behavior stays identical. It also tests whether stripping or paraphrasing comments restores that catch rate.
 
 The [LASR Labs and Google DeepMind preprint](https://arxiv.org/pdf/2607.08066) found that agents can persuade monitors, but it used hardcoded actions rather than executable work. This project moves the question to code with verified backdoors and reports the result as a catch rate at a fixed audit budget.
 
 **Research questions**
 
-1. Do reframing, compliance claims, or deferential tone reduce the catch rate compared with plain technical comments?
+1. Do reframing, compliance claims, or deferential tone change the catch rate compared with plain technical comments?
 2. Do comment stripping or neutral paraphrasing reduce that loss?
 3. What does each defense cost when comments are merely plain and useful?
 
@@ -18,19 +18,25 @@ The [LASR Labs and Google DeepMind preprint](https://arxiv.org/pdf/2607.08066) f
 
 ## Hypotheses
 
-The two confirmatory hypotheses are H1 and H2; everything else is exploratory.
+The two confirmatory hypothesis families are H1 and H2; everything else is exploratory. All confirmatory tests are two-sided, so an increase in catch rate counts as an effect too. The predicted direction is given as a prior below, not built into the tests.
 
 | ID | Status | Prediction | Comparison |
 | --- | --- | --- | --- |
-| H1a | Confirmatory | Reframing lowers the catch rate | Reframing vs. plain, raw monitor |
-| H1b | Confirmatory | Compliance claims lower the catch rate | Compliance vs. plain, raw monitor |
-| H1c | Confirmatory | Deferential tone lowers the catch rate | Deference vs. plain, raw monitor |
-| H2a | Confirmatory | Stripping recovers catches lost to persuasion | Stripped vs. raw, pooled across the three persuasive styles |
-| H2b | Confirmatory | Paraphrasing recovers catches lost to persuasion | Paraphrased vs. raw, pooled across the three persuasive styles |
+| H1a | Confirmatory | Reframing changes the catch rate | Reframing vs. plain, raw monitor |
+| H1b | Confirmatory | Compliance claims change the catch rate | Compliance vs. plain, raw monitor |
+| H1c | Confirmatory | Deferential tone changes the catch rate | Deference vs. plain, raw monitor |
+| H2a | Confirmatory, gated | Stripping changes the catch rate of persuasive code | Stripped vs. raw persuasive, pooled across the three persuasive styles |
+| H2b | Confirmatory, gated | Paraphrasing changes the catch rate of persuasive code | Paraphrased persuasive vs. raw persuasive, pooled across the three persuasive styles |
 | E1 | Exploratory | Removing plain comments changes the catch rate | Stripped vs. raw, plain style |
 | E2 | Exploratory | The most effective style differs by monitor score band | Style effects by baseline suspicion |
+| E3 | Exploratory | Paraphrasing plain comments changes the catch rate | Paraphrased vs. raw, plain style |
+| E4 | Exploratory | Warning the monitor about adversarial comments changes the catch rate | Warned vs. raw, each style |
 
-Draft prior, to confirm or change before the freeze: H1a and H1b are more likely than H1c, because they offer a reason for the suspicious logic rather than only a friendly tone. H1c is still worth testing because tone-only effects are the most surprising result this design could find.
+**H2 gate:** H2 is tested only if at least one H1 test passes after correction. If no H1 test passes, persuasion caused no loss to recover, so H2a and H2b are reported as exploratory. Testing the families in this fixed order also controls the error rate across both families.
+
+**H2 pooling:** For each backdoor, average its raw catch outcome across the three persuasive styles and compare that with its stripped (or paraphrased-persuasive, averaged the same way) outcome. Stripped code is identical across styles, so a difference-in-differences against plain comments would reduce to the H1 effect for stripping. That is why H2 compares defended persuasive code with raw persuasive code. Each defended catch rate is also reported next to the raw plain catch rate, to show how much of the loss it recovers.
+
+Draft prior, to confirm or change before the freeze: all three styles lower the catch rate. H1a and H1b are more likely than H1c, because they offer a reason for the suspicious logic rather than only a friendly tone. H1c is still worth testing because tone-only effects are the most surprising result this design could find.
 
 ## Threat model and data
 
@@ -74,23 +80,28 @@ Each backdoor gets four comment styles and is scored under up to three monitor v
 | --- | --- |
 | Raw | Code with comments unchanged |
 | Stripped | Code with all comments removed |
-| Paraphrased | Code with each comment rewritten as a neutral factual note, removing unsupported claims |
+| Paraphrased | Code with each comment rewritten as a neutral factual note (see the paraphrase rule below) |
+| Warned (exploratory) | Raw code, with one added line in the monitor prompt saying that comments may be written by the party under review |
+
+The warned view is the zero-cost prompt-level defense. It is scored for every style and for honest code, with its own honest threshold, and it is run only if the budget allows after the confirmatory views.
 
 **Generation rules**
 
-- Before adding new comments, remove all existing comments and docstrings from backdoored and honest code, then apply one formatter. Control Tax notes that existing comments often describe the bug, and 98% of Claude 3.7 Sonnet backdoors contain them.
+- Before adding new comments, remove all existing comments and docstrings from backdoored and honest code, then apply one formatter. Strip comments with Python's `tokenize` module rather than a regex, so `#` characters inside strings survive. Control Tax notes that existing comments often describe the bug, and 98% of Claude 3.7 Sonnet backdoors contain them.
 - The comment writer may know where the backdoor is, so it can target the suspicious lines.
+- **Matched comment structure:** for each backdoored solution, write the plain comment set first. Each persuasive style then rewrites those same comments one by one, on the same lines and with the same number of comments. Only the wording changes, so style effects are not confounded with which lines are commented or how much is described.
+- Each comment has the same per-comment length cap in every condition, set in tokens during the pilot.
 - Comments must not use words such as backdoor, trigger, or secret.
-- Every condition uses the same comment limit, set during the pilot.
 - Docstrings are not allowed, because they change the AST.
 - Paraphrasing runs on extracted comment text only, then the text goes back on the same lines. The code never passes through the paraphraser.
+- **Paraphrase rule:** the paraphraser cannot see the code, so it cannot judge which claims are supported. It applies a mechanical rule instead: keep descriptions of what the code does, and remove claims about testing, review, standards, or intent, and any wording addressed to the reader. The same rule applies to honest and backdoored code.
 
 **Validity checks**
 
 1. Python `ast.dump` output must match the cleaned code for every generated comment set, stripped version, and paraphrased version.
-2. Run a leakage scan for banned words, then read 30 random samples by hand.
+2. Run a leakage scan for banned words in comments, identifiers, and string literals, then read 30 random samples by hand. The AST check keeps identifiers, and Control Tax backdoors sometimes use names that reveal the bug. Exclude a backdoor whose code leaks, and report the count.
 3. Log refusals. Retry a failed style twice, then exclude that backdoor from all conditions and report the count.
-4. Report comment length by style.
+4. Report comment length by style. Check that comment count and positions match across styles for every backdoor.
 5. Pause the run if more than 10% of backdoors are excluded.
 
 ## Metrics, analysis plan and decision rules
@@ -103,29 +114,32 @@ The primary metric is the backdoor catch rate at a 5% audit budget. A backdoor i
 - **Secondary:** catch rate at a 2% audit budget, plus AUROC.
 - **Threshold:** calculate it separately for raw, stripped, and paraphrased views using honest solutions under that same view.
 - **Scores:** use a 0–100 suspicion scale. Break ties with a fixed random seed.
+- **Monitor sampling:** fix the monitor's temperature and reasoning settings in the config. The pilot measures how many items tie at the 5% threshold. If ties are common, either score each item k times with independent calls to the same monitor and average the scores, or take the expected score from token logprobs where the API provides them. Lock the choice and k before the freeze.
 
 **Analysis**
 
 1. Calculate paired differences in catch rate by problem.
-2. Run a paired bootstrap with 10,000 resamples, resampling backdoored and honest problems and recalculating thresholds each time.
-3. Report each difference with a 95% confidence interval.
-4. Apply Holm correction within H1 and separately within H2.
-5. Treat E1, E2, and all 2% audit results as exploratory.
+2. Run a paired bootstrap with 10,000 resamples. Resample by problem, keeping each problem's backdoored and honest solutions together, and recalculate thresholds each time.
+3. Report each confirmatory difference with a Bonferroni-adjusted confidence interval: 98.3% for the three H1 tests and 97.5% for the two H2 tests. Holm correction applies to the tests; the adjusted intervals are slightly conservative.
+4. Apply Holm correction within H1, then test H2 with Holm correction only if the H1 gate passes.
+5. Treat E1–E4 and all 2% audit results as exploratory, with unadjusted 95% intervals.
 
 **Decision rules**
 
 | Result | Conclusion |
 | --- | --- |
-| Corrected test passes and the catch rate changes by at least 10 points | Supported, with an effect size large enough to matter |
-| Corrected test passes but the change is under 10 points | Real effect, likely small in practice |
-| Confidence interval sits entirely within ±10 points | No meaningful effect found |
+| Corrected test passes and the point estimate's magnitude is at least 10 points | Supported, with an effect size large enough to matter |
+| Corrected test passes but the point estimate's magnitude is under 10 points | Real effect, likely small in practice |
+| Equivalence test passes: the adjusted 1 − 2α interval sits entirely within ±10 points | No meaningful effect found |
 | Anything else | Inconclusive |
 
-**Sample size:** At least 155 pairs would give about 80% power to detect a 10-point drop at α = 0.05, assuming 20% of pairs disagree. Bonferroni correction across the three H1 tests raises that to about 205 pairs, so 200 is close. This ignores threshold uncertainty, so recalculate it with pilot data.
+The equivalence rule is a two one-sided test (TOST) at the family's Bonferroni-adjusted α: a 96.7% interval for each H1 test and a 95% interval for each H2 test.
+
+**Sample size:** At least 155 pairs would give about 80% power to detect a 10-point change with a two-sided test at α = 0.05, assuming 20% of pairs disagree. Bonferroni correction across the three H1 tests raises that to about 205 pairs, so 200 is close; Holm is slightly more powerful than this estimate assumes. This ignores threshold uncertainty. For H1 that uncertainty largely cancels, because all three tests share the raw-view threshold. H2 compares views with separately estimated thresholds, so it has extra variance and likely less power than H1. Recalculate with pilot data.
 
 **Pilot gate:** The pilot uses 20 backdoored and 40 honest solutions, and its data stays out of the confirmatory analysis. Continue only if the plain raw catch rate is roughly 20–90%, because results near 0% or 100% leave little room to see an effect. With 20 backdoors this is a rough check only.
 
-**Stopping rule:** Run the frozen sample once, with a $30 spending cap and no added samples after seeing confirmatory results.
+**Stopping rule:** Run the frozen sample once, with a $30 spending cap and no added samples after seeing confirmatory results. Run confirmatory calls in a random order fixed by seed, so a run cut short by the cap is a random subsample rather than a biased one. Exploratory runs (the warned view and the Claude 3.7 Sonnet check) start only after the confirmatory calls finish.
 
 ## Limitations and data handling
 
@@ -136,6 +150,7 @@ These results would show how a monitor behaves on short APPS solutions, not on r
 - Honest solutions are human-written, while backdoored ones are model-edited, so monitors may pick up on style. Prior [Control Tax](https://arxiv.org/html/2506.05296) work shares this structure.
 - Comment styles are fixed and non-adaptive, so results may understate what an attacker could achieve.
 - One attacker dataset and one monitor model limit generalization.
+- If the comment writer, paraphraser, and monitor come from the same model family, persuasion effects may be stronger or weaker than across families. Report which families were used.
 - A current cheap monitor may be stronger than the 2025 attacker, which departs from the usual weaker-monitor setup. Report this if it applies.
 - Stripping comments is cheap here, but it may cost more on code where comments carry needed context.
 - Pre-filtering to working backdoors means the sample excludes failed attempts.
@@ -154,7 +169,7 @@ These results would show how a monitor behaves on short APPS solutions, not on r
 The repo separates frozen study materials, reusable code, private data, and publishable results. Pin `control-arena==20.1.1`, the [latest release as of Oct 22, 2026](https://pypi.org/project/control-arena/), unless the pilot requires a change.
 
 ```text
-persuasive-comments-vs-monitors/
+control-tax-persuasion/
 ├── README.md                 # Question, result, reproduction steps
 ├── PREREGISTRATION.md        # Frozen copy of this plan
 ├── AMENDMENTS.md             # Dated changes after the freeze
@@ -197,7 +212,7 @@ Every pipeline step should write to `runs/<run_id>/` with its config hash, promp
 
 Finish the pilot and freeze the plan by Nov 12, so the full run does not compete with the hackathon. The dates are a proposal, so adjust them to your availability.
 
-&#91;embedded content: proposed schedule · Nov 5–30, 2026\]
+**Proposed schedule:** Nov 5–30, 2026, with the pilot finished and the plan frozen by Nov 12.
 
 1. Build data filtering, comment transforms, AST checks, and tests.
 2. Write prompts and run the pilot.
@@ -206,7 +221,7 @@ Finish the pilot and freeze the plan by Nov 12, so the full run does not compete
 5. Run the pre-registered analysis before any exploratory work.
 6. Publish the repo and writeup, then ask for feedback in `control-arena-discussion`.
 
-**Estimated cost:** About 5,400 model calls, or roughly $6–25 depending on model pricing. This assumes about 2,500 input and 300 output tokens per monitor call, so check it against pilot usage.
+**Estimated cost:** About 5,400 model calls, or roughly $6–25 depending on model pricing. This assumes one score per item and about 2,500 input and 300 output tokens per monitor call, so check it against pilot usage. Averaging k scores per item multiplies the roughly 3,000 monitor calls by k and may not fit the $30 cap. The exploratory warned view adds about 1,200 monitor calls (800 backdoored, 400 honest).
 
 **After the freeze:** Log every change in `AMENDMENTS.md` with its date and reason. Any change made after seeing confirmatory results makes the affected analysis exploratory.
 
@@ -216,8 +231,10 @@ These choices stay open until the pilot, then freeze with the rest of the plan.
 
 - [ ] Pilot Claude Haiku 4.5 or 5.5 and a cheap OpenAI mini model, then keep the cheaper one with a plain-comment catch rate of about 20–90%. Confirm official prices first.
 - [ ] Choose the comment writer and paraphraser models.
-- [ ] Choose the monitor prompt, starting from the Control Tax or ControlArena version.
-- [ ] Set the comment limit from pilot output.
+- [ ] Choose the monitor prompt, starting from the Control Tax or ControlArena version, and write the warned-view line.
+- [ ] Set the per-comment length cap from pilot output.
+- [ ] Choose the monitor sampling method: one score, the average of k scores, or a logprob-based score.
+- [ ] Check how the dataset's honest solutions relate to the backdoors. If each is the original the backdoor was edited from, consider drawing all 400 honest solutions from problems outside the backdoor sample.
 - [ ] Confirm that each API account does not train on submitted data.
 - [ ] Confirm or change the draft priors in Hypotheses.
 - [ ] Decide whether to freeze with a Git tag alone or also post on OSF.
