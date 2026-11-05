@@ -238,3 +238,31 @@ def test_confirmatory_pauses_on_exclusions(tmp_path, monkeypatch):
     r = run_pilot(path, "conf", limit=4, allow_unfrozen=True)
     assert r["status"].startswith("paused")
     assert r["monitors"] == {} and not batches
+
+
+@pytest.mark.skipif(not DATASET.exists(), reason="private dataset not downloaded")
+def test_warned_run_reuses_confirmatory_scores(tmp_path, monkeypatch):
+    from pcm.analysis import run_analysis
+
+    path, batches = _confirmatory_setup(tmp_path, monkeypatch, max_excluded_share="1.0")
+    first = run_pilot(path, "conf", limit=4, allow_unfrozen=True)
+    text = (REPO / "configs/exploratory-warned.toml").read_text()
+    wpath = tmp_path / "warned-test.toml"
+    wpath.write_text(re.sub(r"^max_excluded_share = .*$", "max_excluded_share = 1.0", text, flags=re.M))
+    n_before = len(batches)
+    r = run_pilot(wpath, "warned", limit=4, allow_unfrozen=True)
+    label = "claude-haiku-4-5-20251001"
+    kept_bd, kept_h = _kept(r, 4, 8)
+    n_warned = kept_bd * 4 + kept_h  # every raw view, one sample each
+    assert r["new_calls"] == n_warned
+    sent = [req for b in list(batches.values())[n_before:] for req in b.values()]
+    warning = (REPO / "prompts/monitor_warning.txt").read_text().strip()
+    assert len(sent) == n_warned and all(warning in req["prompt"] for req in sent)
+    rows = [json.loads(l) for l in open(tmp_path / f"runs/warned/scores-{label}.jsonl")]
+    assert {r_["sample"] for r_ in rows if r_["view"] == "warned"} == {0}
+    assert first["monitors"][label]["score_calls"] + n_warned == len(rows)
+
+    a = run_analysis("warned", resamples=50, max_samples=1)
+    ids = {x["id"] for x in a["results"]}
+    assert {"E4-plain", "E4-reframing", "E4-compliance", "E4-deference"} <= ids
+    assert (tmp_path / f"runs/warned/analysis-{label}-k1.md").exists()

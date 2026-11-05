@@ -24,4 +24,4 @@ Each comment goes on its own line directly above its target line, at that line's
 
 ## Status
 
-Drafts for the pilot. Freeze them with the plan, after which any change is logged in `AMENDMENTS.md`.
+Piloted and final as of 2026-11-05: the monitor prompt is Control Tax's `MONITOR_PROMPT_V2` unchanged, and the warned line was reworded to say the comments *may* come from the party under review. Freeze them with the plan, after which any change is logged in `AMENDMENTS.md`.

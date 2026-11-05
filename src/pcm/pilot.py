@@ -295,11 +295,17 @@ def _score_chunk(caller, cand, para, mon, run, k, chunk_items, comment_sets, cle
         views.append((_key(i), "stripped", "none", clean[_key(i)]))
 
     tasks = [(v, s) for v in views for s in range(k)]
+    if mon.get("warned"):
+        # Exploratory warned view (E4): raw code, with the warning line in the monitor prompt.
+        warned = [(ik, "warned", style, code) for ik, view, style, code in views if view == "raw"]
+        tasks += [(v, s) for v in warned for s in range(mon.get("warned_samples", k))]
     mon_cfg = {"effort": cand["effort"], "max_output_tokens": mon["max_output_tokens"],
                "thinking": cand.get("thinking", True)}
+    warning = (Path("prompts") / "monitor_warning.txt").read_text() if mon.get("warned") else ""
     scored = _parallel(
-        lambda t: {**score(caller, model, mon_cfg, by_key[t[0][0]].problem_statement,
-                           t[0][3], "", t[1], f"score:{t[0][0]}:{t[0][1]}:{t[0][2]}"),
+        lambda t: {**score(caller, model, mon_cfg, by_key[t[0][0]].problem_statement, t[0][3],
+                           warning if t[0][1] == "warned" else "", t[1],
+                           f"score:{t[0][0]}:{t[0][1]}:{t[0][2]}"),
                    "item": t[0][0], "view": t[0][1], "style": t[0][2], "sample": t[1]},
         tasks, run["max_workers"], caller)
     acc["paras"].update(paras)

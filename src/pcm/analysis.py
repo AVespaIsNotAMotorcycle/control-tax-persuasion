@@ -405,7 +405,11 @@ def render(a: dict, title: str) -> str:
     return "\n".join(L) + "\n"
 
 
-def run_analysis(run_id: str, monitor: str | None = None, resamples: int = 10_000) -> dict:
+def run_analysis(run_id: str, monitor: str | None = None, resamples: int = 10_000,
+                 max_samples: int | None = None) -> dict:
+    """Analyze one scores file. ``max_samples`` keeps only samples 0..max_samples-1 of
+    every condition, so a view scored fewer times (the warned view at k = 1) is
+    compared with the other views at the same k."""
     run_dir = Path("runs") / run_id
     files = sorted(run_dir.glob("scores-*.jsonl"))
     if monitor:
@@ -416,9 +420,11 @@ def run_analysis(run_id: str, monitor: str | None = None, resamples: int = 10_00
     manifest = json.loads((run_dir / "manifest.json").read_text())
     cfg = manifest["config"]
     rows = [json.loads(line) for line in open(files[0])]
+    if max_samples is not None:
+        rows = [r for r in rows if r["sample"] < max_samples]
     a = analyze(rows, cfg["run"]["seed"], resamples, cfg["metrics"]["audit_budget"])
-    a["run_id"], a["scores_file"] = run_id, files[0].name
-    label = files[0].stem.removeprefix("scores-")
+    a["run_id"], a["scores_file"], a["max_samples"] = run_id, files[0].name, max_samples
+    label = files[0].stem.removeprefix("scores-") + (f"-k{max_samples}" if max_samples else "")
     (run_dir / f"analysis-{label}.json").write_text(json.dumps(a, indent=2))
     (run_dir / f"analysis-{label}.md").write_text(render(a, f"{run_id}, {label}"))
     return a

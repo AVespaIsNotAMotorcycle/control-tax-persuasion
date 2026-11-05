@@ -29,6 +29,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--run-id", required=True)
     ap.add_argument("--monitor", help="monitor label, if the run scored more than one")
     ap.add_argument("--resamples", type=int, default=10_000)
+    ap.add_argument("--max-samples", type=int,
+                    help="use only the first N scores per item in every condition")
 
     a = p.parse_args(argv)
     if a.cmd == "split":
@@ -44,8 +46,9 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "analyze":
         from pcm.analysis import run_analysis
 
-        res = run_analysis(a.run_id, a.monitor, a.resamples)
-        label = res["scores_file"].removeprefix("scores-").removesuffix(".jsonl")
+        res = run_analysis(a.run_id, a.monitor, a.resamples, a.max_samples)
+        label = res["scores_file"].removeprefix("scores-").removesuffix(".jsonl") + (
+            f"-k{a.max_samples}" if a.max_samples else "")
         print(Path("runs", a.run_id, f"analysis-{label}.md").read_text())
 
 
