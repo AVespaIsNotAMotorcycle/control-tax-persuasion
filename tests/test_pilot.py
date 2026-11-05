@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -121,7 +122,7 @@ def test_pilot_in_batch_mode(tmp_path, monkeypatch):
     r = run_pilot(Path("configs/pilot.toml"), "batch", limit=2,
                   monitors=["claude-haiku-4-5-20251001"], samples=2, batch=True)
     assert r["status"] == "complete"
-    m = r["monitors"]["claude-haiku-4-5-20251001@medium"]
+    m = r["monitors"]["claude-haiku-4-5-20251001"]
     assert m["unparsed_scores"] == 0 and m["paraphrase"]["failed"] == 0
     assert m["score_calls"] == (2 * 9 + 4 * 3) * 2
     # One batch for paraphrases, one for scores, plus one to resend the expired request.
@@ -139,3 +140,101 @@ def test_pilot_in_batch_mode(tmp_path, monkeypatch):
     r2 = run_pilot(Path("configs/pilot.toml"), "batch", limit=2,
                    monitors=["claude-haiku-4-5-20251001"], samples=2, batch=False)
     assert r2["new_calls"] == 0
+
+
+def _kept(report, n_bd, n_h):
+    w = report["writer"]
+    return n_bd - len(w["excluded_backdoors"]), n_h - w["steps"]["plain_honest"]["failed_after_retries"]
+
+
+def _fake_batches(monkeypatch):
+    """Serve Message Batches from the fake responder; returns the submitted batches."""
+    batches: dict[str, dict] = {}
+
+    def submit(self, requests):
+        bid = f"msgbatch_{len(batches)}"
+        batches[bid] = requests
+        return bid
+
+    monkeypatch.setattr(llm.Caller, "_batch_submit", submit)
+    monkeypatch.setattr(llm.Caller, "_batch_ended", lambda self, bid: True)
+    monkeypatch.setattr(llm.Caller, "_batch_results",
+                        lambda self, bid: ((k, fake_anthropic(self, r)) for k, r in batches[bid].items()))
+    return batches
+
+
+def _confirmatory_setup(tmp_path, monkeypatch, **overrides):
+    for name in ("prompts", "data", "configs"):
+        (tmp_path / name).symlink_to(REPO / name)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(llm.Caller, "_call_anthropic", fake_anthropic)
+    monkeypatch.setattr(llm.Caller, "_call_openai", fake_openai)
+    text = (REPO / "configs/confirmatory.toml").read_text()
+    for key, value in overrides.items():
+        text = re.sub(rf"^{key} = .*$", f"{key} = {value}", text, flags=re.M)
+    path = tmp_path / "confirmatory-test.toml"
+    path.write_text(text)
+    return path, _fake_batches(monkeypatch)
+
+
+@pytest.mark.skipif(not DATASET.exists(), reason="private dataset not downloaded")
+def test_confirmatory_refuses_without_freeze_tag(tmp_path, monkeypatch):
+    path, batches = _confirmatory_setup(tmp_path, monkeypatch)
+    with pytest.raises(SystemExit, match="prereg-v1"):
+        run_pilot(path, "conf", limit=4)
+    assert not (tmp_path / "runs/conf").exists() and not batches
+
+
+@pytest.mark.skipif(not DATASET.exists(), reason="private dataset not downloaded")
+def test_confirmatory_run_in_random_chunks(tmp_path, monkeypatch):
+    # The fake writer comments only unindented lines, so it fails more often than the real one.
+    path, batches = _confirmatory_setup(tmp_path, monkeypatch, max_excluded_share="1.0")
+    r = run_pilot(path, "conf", limit=8, allow_unfrozen=True)
+    assert r["status"] == "complete" and r["split"] == "confirmatory"
+    m = r["monitors"]["claude-haiku-4-5-20251001"]
+    assert m["chunks_done"] == m["chunks"] == 4
+    kept_bd, kept_h = _kept(r, 8, 16)
+    assert m["score_calls"] == (kept_bd * 9 + kept_h * 3) * 2  # k = 2
+    assert len(batches) == 8  # a paraphrase batch and a scoring batch per chunk
+    manifest = json.loads((tmp_path / "runs/conf/manifest.json").read_text())
+    order = manifest["item_order"]
+    assert manifest["unfrozen"] and manifest["shuffle"]
+    assert len(order) == 24 and order != sorted(order)
+    # The order is fixed by the seed.
+    r2 = run_pilot(path, "conf2", limit=8, allow_unfrozen=True)
+    assert json.loads((tmp_path / "runs/conf2/manifest.json").read_text())["item_order"] == order
+    assert r2["new_calls"] == 0
+
+
+@pytest.mark.skipif(not DATASET.exists(), reason="private dataset not downloaded")
+def test_confirmatory_cap_keeps_finished_chunks(tmp_path, monkeypatch):
+    # The fake writer comments only unindented lines, so it fails more often than the real one.
+    path, batches = _confirmatory_setup(tmp_path, monkeypatch, max_excluded_share="1.0")
+    real_flush = llm.Caller.flush
+
+    def capped_flush(self, log=print):
+        if len(batches) >= 2:  # the cap is hit when the second chunk's first batch goes out
+            raise llm.BudgetExceeded("cap")
+        return real_flush(self, log)
+
+    monkeypatch.setattr(llm.Caller, "flush", capped_flush)
+    r = run_pilot(path, "conf", limit=8, allow_unfrozen=True)
+    assert r["status"].startswith("stopped")
+    m = r["monitors"]["claude-haiku-4-5-20251001"]
+    assert m["chunks_done"] == 1
+    rows = [json.loads(l) for l in open(tmp_path / "runs/conf/scores-claude-haiku-4-5-20251001.jsonl")]
+    assert len(rows) == m["score_calls"] > 0
+    # Only first-chunk items, each with every view and both samples.
+    per_item = Counter(row["item"] for row in rows)
+    assert all(n == (18 if item.startswith("backdoored") else 6) for item, n in per_item.items())
+    kept_bd, kept_h = _kept(r, 8, 16)
+    assert sum(i.startswith("backdoored") for i in per_item) == kept_bd // 4 or kept_bd < 4
+    assert len(per_item) < kept_bd + kept_h
+
+
+@pytest.mark.skipif(not DATASET.exists(), reason="private dataset not downloaded")
+def test_confirmatory_pauses_on_exclusions(tmp_path, monkeypatch):
+    path, batches = _confirmatory_setup(tmp_path, monkeypatch, max_excluded_share="-0.01")
+    r = run_pilot(path, "conf", limit=4, allow_unfrozen=True)
+    assert r["status"].startswith("paused")
+    assert r["monitors"] == {} and not batches

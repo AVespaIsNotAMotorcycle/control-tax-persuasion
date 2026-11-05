@@ -13,7 +13,7 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("split", help="make the pre-registered problem split (once)")
     sp.add_argument("args", nargs=argparse.REMAINDER)
 
-    pp = sub.add_parser("pilot", help="run the pilot and write a report")
+    pp = sub.add_parser("pilot", help="run the pilot or the confirmatory sample and write a report")
     pp.add_argument("--config", type=Path, default=Path("configs/pilot.toml"))
     pp.add_argument("--run-id", required=True)
     pp.add_argument("--limit", type=int, help="use only this many backdoors (and twice as many honest)")
@@ -22,6 +22,8 @@ def main(argv: list[str] | None = None) -> None:
     pp.add_argument("--budget", type=float, help="spending cap in USD for this run")
     pp.add_argument("--batch", action=argparse.BooleanOptionalAction, default=None,
                     help="send Claude calls as Message Batches at half price (overrides the config)")
+    pp.add_argument("--allow-unfrozen", action="store_true",
+                    help="run even if code, configs or prompts differ from the config's require_tag")
 
     a = p.parse_args(argv)
     if a.cmd == "split":
@@ -31,7 +33,7 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "pilot":
         from pcm.pilot import run_pilot
 
-        r = run_pilot(a.config, a.run_id, a.limit, a.monitors, a.samples, a.budget, a.batch)
+        r = run_pilot(a.config, a.run_id, a.limit, a.monitors, a.samples, a.budget, a.batch, a.allow_unfrozen)
         print(Path("runs", a.run_id, "report.md").read_text())
         print(f"Status: {r['status']}; spend ${r['spend_usd']:.2f}")
 

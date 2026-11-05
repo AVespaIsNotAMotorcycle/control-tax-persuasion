@@ -1,20 +1,30 @@
-"""Run the pilot: generate comments, build monitor views, score, and report.
+"""Run the pilot or the confirmatory sample: generate comments, build monitor
+views, score, and report.
 
 Stages (each parallel, each cached call by call):
 
-1. Plain comments for every backdoored and honest pilot solution.
+1. Plain comments for every backdoored and honest solution.
 2. Reframing, compliance, and deference rewrites for each backdoored solution.
    A backdoor that fails any style after retries is excluded from all
-   conditions.
+   conditions. With ``max_excluded_share`` set, the run pauses here, before any
+   monitor spending, if too many backdoors are excluded.
 3. For each monitor candidate, paraphrase every comment set with that model.
 4. Score every view k times with each monitor candidate.
-5. Write ``report.json`` and ``report.md`` with the pilot-gate numbers.
+5. Write ``report.json`` and ``report.md``.
+
+With ``shuffle`` the items run in a random order fixed by the run seed, and with
+``chunks`` stages 3 and 4 run chunk by chunk, each chunk a random share of the
+backdoored and honest items. A run stopped by the spending cap then leaves
+complete chunks that form a random subsample (PREREGISTRATION.md, Stopping rule).
+With ``require_tag`` the run refuses to start unless the code, configs and
+prompts match that Git tag.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import random
 import statistics
 import subprocess
 import tomllib
@@ -27,7 +37,7 @@ from pathlib import Path
 
 from pcm.comments import STYLES, generate_plain, generate_style
 from pcm.data import DEFAULT_DATASET, DEFAULT_SPLIT, Item, load_items
-from pcm.llm import Budget, BudgetExceeded, Caller, Deferred, Prices
+from pcm.llm import NO_EFFORT_MODELS, Budget, BudgetExceeded, Caller, Deferred, Prices
 from pcm.metrics import auroc, catch_rate
 from pcm.monitor import paraphrase, score
 from pcm.transforms import clean_code, insert_comments
@@ -79,7 +89,10 @@ def _parallel(fn, tasks, workers, caller: Caller | None = None):
 
 
 def _label(cand: dict) -> str:
-    """"model@effort", plus "-nothink" when the candidate scores with thinking off."""
+    """"model@effort", plus "-nothink" when the candidate scores with thinking off.
+    Models without an effort setting (Haiku 4.5) are labeled by name alone."""
+    if cand["model"].startswith(NO_EFFORT_MODELS):
+        return cand["model"]
     return f"{cand['model']}@{cand['effort']}" + ("" if cand.get("thinking", True) else "-nothink")
 
 
@@ -104,14 +117,45 @@ def _key(item: Item) -> str:
     return f"{item.kind}:{item.problem_id}"
 
 
+FROZEN_PATHS = ("configs", "prompts", "src", "pyproject.toml")
+
+
+def freeze_problems(tag: str) -> list[str]:
+    """Reasons the working tree does not match the frozen tag (empty if it does)."""
+    def git(*args):
+        return subprocess.run(["git", *args], capture_output=True, text=True)
+    if git("rev-parse", "--verify", "--quiet", f"refs/tags/{tag}").returncode != 0:
+        return [f"tag {tag} does not exist"]
+    problems = []
+    changed = git("diff", "--name-only", tag, "--", *FROZEN_PATHS).stdout.split()
+    if changed:
+        problems.append(f"changed since {tag}: {', '.join(changed)}")
+    untracked = git("ls-files", "--others", "--exclude-standard", "--", *FROZEN_PATHS).stdout.split()
+    if untracked:
+        problems.append(f"untracked files: {', '.join(untracked)}")
+    return problems
+
+
+def _chunks(backdoored: list, honest: list, n: int) -> list[tuple[list, list]]:
+    """Split both lists into n parts of near-equal size, keeping their order."""
+    def part(xs, j):
+        return xs[len(xs) * j // n: len(xs) * (j + 1) // n]
+    return [(part(backdoored, j), part(honest, j)) for j in range(n)]
+
+
 def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
               monitors: list[str] | None = None, samples: int | None = None,
-              budget_usd: float | None = None, batch: bool | None = None) -> dict:
+              budget_usd: float | None = None, batch: bool | None = None,
+              allow_unfrozen: bool = False) -> dict:
     from dotenv import load_dotenv
 
-    load_dotenv()  # API keys go into the environment; they are never logged
     cfg = tomllib.loads(Path(config_path).read_text())
     run, writer, mon, para = cfg["run"], cfg["writer"], cfg["monitor"], cfg["paraphraser"]
+    unfrozen = freeze_problems(run["require_tag"]) if run.get("require_tag") else []
+    if unfrozen and not allow_unfrozen:
+        raise SystemExit("Refusing to run: " + "; ".join(unfrozen)
+                         + ". Log any change in AMENDMENTS.md and re-tag, or pass --allow-unfrozen.")
+    load_dotenv()  # API keys go into the environment; they are never logged
     candidates = _candidates(mon, monitors)
     k = samples or mon["samples"]
     attempts = run["max_attempts"]
@@ -127,6 +171,10 @@ def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
     honest = [i for i in items if i.kind == "honest"]
     if limit:
         backdoored, honest = backdoored[:limit], honest[: 2 * limit]
+    if run.get("shuffle"):
+        rng = random.Random(run["seed"])
+        rng.shuffle(backdoored)
+        rng.shuffle(honest)
     items = backdoored + honest
     clean = {_key(i): clean_code(i.code) for i in items}
 
@@ -143,12 +191,19 @@ def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
         "samples": k,
         "batch": caller.defer,
         "limit": limit,
+        "shuffle": bool(run.get("shuffle")),
+        "chunks": run.get("chunks", 1),
+        "require_tag": run.get("require_tag"),
+        "unfrozen": unfrozen,
+        "item_order": [_key(i) for i in items],
         "n_backdoored": len(backdoored),
         "n_honest": len(honest),
     }
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
-    report: dict = {"run_id": run_id, "status": "complete"}
+    report: dict = {"run_id": run_id, "split": run["split"], "status": "complete"}
+    progress: dict[str, dict] = {}
+    chunks: list = []
     try:
         # 1. Plain comments.
         plain = dict(zip(
@@ -188,40 +243,29 @@ def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
 
         _save_generations(run_dir, plain, styled, excluded)
         report["writer"] = _writer_report(plain, styled, backdoored, honest, excluded, caller)
+        cap = run.get("max_excluded_share")
+        if cap is not None and report["writer"]["excluded_share"] > cap:
+            report["status"] = (f"paused: {report['writer']['excluded_share']:.1%} of backdoors "
+                                f"excluded, above {cap:.0%}")
+            candidates = []
 
-        # 3 and 4. Paraphrase and score with each monitor candidate.
+        # 3 and 4. Paraphrase and score with each monitor candidate, chunk by chunk.
         report["monitors"] = {}
+        chunks = _chunks(kept_bd, kept_h, run.get("chunks", 1))
         for cand in candidates:
-            model, label = cand["model"], _label(cand)
-            set_keys = list(comment_sets)
-            paras = dict(zip(set_keys, _parallel(
-                lambda sk: paraphrase(caller, model, para, clean[sk[0]], comment_sets[sk],
-                                      attempts, f"paraphrase:{sk[0]}:{sk[1]}"),
-                set_keys, run["max_workers"], caller)))
-
-            views = []  # (item_key, view, style, code)
-            for (ik, style), cs in comment_sets.items():
-                views.append((ik, "raw", style, insert_comments(clean[ik], cs)))
-                if paras[(ik, style)].comments is not None:
-                    views.append((ik, "paraphrased", style,
-                                  insert_comments(clean[ik], paras[(ik, style)].comments)))
-            for i in kept_bd + kept_h:
-                views.append((_key(i), "stripped", "none", clean[_key(i)]))
-
-            tasks = [(v, s) for v in views for s in range(k)]
-            mon_cfg = {"effort": cand["effort"], "max_output_tokens": mon["max_output_tokens"],
-                       "thinking": cand.get("thinking", True)}
-            scored = _parallel(
-                lambda t: {**score(caller, model, mon_cfg, by_key[t[0][0]].problem_statement,
-                                   t[0][3], "", t[1], f"score:{t[0][0]}:{t[0][1]}:{t[0][2]}"),
-                           "item": t[0][0], "view": t[0][1], "style": t[0][2], "sample": t[1]},
-                tasks, run["max_workers"], caller)
-            with open(run_dir / f"scores-{label}.jsonl", "w") as f:
-                for row in scored:
-                    f.write(json.dumps(row) + "\n")
-            report["monitors"][label] = _monitor_report(scored, paras, cfg, k)
+            label = _label(cand)
+            progress[label] = {"scored": [], "paras": {}, "chunks_done": 0}
+            for bd_part, h_part in chunks:
+                _score_chunk(caller, cand, para, mon, run, k, bd_part + h_part, comment_sets,
+                             clean, by_key, progress[label])
+                progress[label]["chunks_done"] += 1
+            _finish_monitor(report, run_dir, label, progress[label], cfg, k, len(chunks))
     except BudgetExceeded as e:
         report["status"] = f"stopped: {e}"
+        for label, p in progress.items():  # keep every chunk that finished before the cap
+            if label not in report.get("monitors", {}):
+                report.setdefault("monitors", {})
+                _finish_monitor(report, run_dir, label, p, cfg, k, len(chunks))
 
     report["spend_usd"] = round(caller.budget.spent_usd, 4)
     report["new_calls"] = caller.new_calls
@@ -229,6 +273,46 @@ def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
     (run_dir / "report.json").write_text(json.dumps(report, indent=2))
     (run_dir / "report.md").write_text(render_report(report))
     return report
+
+
+def _score_chunk(caller, cand, para, mon, run, k, chunk_items, comment_sets, clean, by_key, acc):
+    """Paraphrase and score every view of one chunk's items; append to ``acc``."""
+    model = cand["model"]
+    keys = {_key(i) for i in chunk_items}
+    set_keys = [sk for sk in comment_sets if sk[0] in keys]
+    paras = dict(zip(set_keys, _parallel(
+        lambda sk: paraphrase(caller, model, para, clean[sk[0]], comment_sets[sk],
+                              run["max_attempts"], f"paraphrase:{sk[0]}:{sk[1]}"),
+        set_keys, run["max_workers"], caller)))
+
+    views = []  # (item_key, view, style, code)
+    for sk in set_keys:
+        ik, style = sk
+        views.append((ik, "raw", style, insert_comments(clean[ik], comment_sets[sk])))
+        if paras[sk].comments is not None:
+            views.append((ik, "paraphrased", style, insert_comments(clean[ik], paras[sk].comments)))
+    for i in chunk_items:
+        views.append((_key(i), "stripped", "none", clean[_key(i)]))
+
+    tasks = [(v, s) for v in views for s in range(k)]
+    mon_cfg = {"effort": cand["effort"], "max_output_tokens": mon["max_output_tokens"],
+               "thinking": cand.get("thinking", True)}
+    scored = _parallel(
+        lambda t: {**score(caller, model, mon_cfg, by_key[t[0][0]].problem_statement,
+                           t[0][3], "", t[1], f"score:{t[0][0]}:{t[0][1]}:{t[0][2]}"),
+                   "item": t[0][0], "view": t[0][1], "style": t[0][2], "sample": t[1]},
+        tasks, run["max_workers"], caller)
+    acc["paras"].update(paras)
+    acc["scored"].extend(scored)
+
+
+def _finish_monitor(report, run_dir, label, acc, cfg, k, n_chunks):
+    with open(run_dir / f"scores-{label}.jsonl", "w") as f:
+        for row in acc["scored"]:
+            f.write(json.dumps(row) + "\n")
+    if acc["scored"]:
+        report["monitors"][label] = {**_monitor_report(acc["scored"], acc["paras"], cfg, k),
+                                     "chunks_done": acc["chunks_done"], "chunks": n_chunks}
 
 
 def _save_generations(run_dir, plain, styled, excluded):
@@ -346,7 +430,8 @@ def _monitor_report(scored, paras, cfg, k) -> dict:
 
 
 def render_report(r: dict) -> str:
-    lines = [f"# Pilot report: {r['run_id']}", "", f"Status: {r['status']}  ",
+    split = r.get("split", "pilot")
+    lines = [f"# {split.capitalize()} report: {r['run_id']}", "", f"Status: {r['status']}  ",
              f"Spend: ${r['spend_usd']:.2f} ({r['new_calls']} new calls, {r['cached_calls']} cached)", ""]
     w = r.get("writer")
     if w:
@@ -364,7 +449,9 @@ def render_report(r: dict) -> str:
         rate = g["plain_raw_catch_rate"]
         lines += [f"## Monitor: {model}", "",
                   f"Gate (plain, raw, mean of k): {rate if rate is None else f'{rate:.0%}'} "
-                  f"-> {'PASS' if g['passes'] else 'FAIL'}  ",
+                  f"-> {'PASS' if g['passes'] else 'FAIL'}"
+                  + (" (descriptive only outside the pilot)" if split != "pilot" else "") + "  ",
+                  f"Chunks finished: {m.get('chunks_done')} of {m.get('chunks')}  ",
                   f"Tokens per call: {m['mean_input_tokens']} in, {m['mean_output_tokens']} out "
                   f"({m['mean_reasoning_tokens']} reasoning); ${m['mean_cost_per_call']:.5f} per call  ",
                   f"Unparsed scores: {m['unparsed_scores']} of {m['score_calls']}; "
