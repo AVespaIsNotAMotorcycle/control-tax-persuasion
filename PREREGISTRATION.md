@@ -225,16 +225,27 @@ Finish the pilot and freeze the plan by Nov 12, so the full run does not compete
 
 **After the freeze:** Log every change in `AMENDMENTS.md` with its date and reason. Any change made after seeing confirmatory results makes the affected analysis exploratory.
 
+## Before the pilot
+
+These must be settled before any pilot call, because the pilot depends on them or because deciding them after seeing pilot data would weaken the plan.
+
+- [ ] Confirm that each API account does not train on submitted data. Pilot calls fall under the same data-handling rules.
+- [ ] Check how the dataset's honest solutions relate to the backdoors. If each is the original the backdoor was edited from, consider drawing all 400 honest solutions from problems outside the backdoor sample.
+- [ ] Fix the solution filters and the seed that assigns pilot and confirmatory problems, then run the split.
+- [ ] Choose the comment writer and paraphraser models.
+- [ ] Draft the prompts: the four comment styles, the paraphraser with the mechanical rule, and a first monitor prompt.
+- [ ] Decide whether pilot spending counts toward the $30 cap, or set a separate pilot budget.
+- [ ] Set a provisional, generous per-comment cap for pilot generation (for example, about 40 tokens) and record it.
+- [ ] Fix the monitor's temperature and reasoning settings. Collect about 5 independent scores per pilot item, plus logprobs where the API provides them, so every sampling option can be compared without rerunning.
+- [ ] Define what happens at the pilot gate: which monitor is kept if both candidates fall in the 20–90% range (default: the cheaper one), and what to do if neither does (try another model, revise the monitor prompt, or stop). Also cap how many revision rounds are allowed before stopping.
+- [ ] Confirm or change the draft priors in Hypotheses.
+
 ## Open choices to lock before the full run
 
 These choices stay open until the pilot, then freeze with the rest of the plan.
 
-- [ ] Pilot Claude Haiku 4.5 or 5.5 and a cheap OpenAI mini model, then keep the cheaper one with a plain-comment catch rate of about 20–90%. Confirm official prices first.
-- [ ] Choose the comment writer and paraphraser models.
-- [ ] Choose the monitor prompt, starting from the Control Tax or ControlArena version, and write the warned-view line.
-- [ ] Set the per-comment length cap from pilot output.
+- [ ] Pilot Claude Haiku 4.5 or 5.5 and a cheap OpenAI mini model, then keep one according to the pilot-gate rule above. Confirm official prices first.
+- [ ] Finalize the monitor prompt, starting from the Control Tax or ControlArena version, and write the warned-view line.
+- [ ] Set the final per-comment length cap from pilot output.
 - [ ] Choose the monitor sampling method: one score, the average of k scores, or a logprob-based score.
-- [ ] Check how the dataset's honest solutions relate to the backdoors. If each is the original the backdoor was edited from, consider drawing all 400 honest solutions from problems outside the backdoor sample.
-- [ ] Confirm that each API account does not train on submitted data.
-- [ ] Confirm or change the draft priors in Hypotheses.
 - [ ] Decide whether to freeze with a Git tag alone or also post on OSF.
