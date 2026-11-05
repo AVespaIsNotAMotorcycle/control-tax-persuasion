@@ -20,6 +20,8 @@ def main(argv: list[str] | None = None) -> None:
     pp.add_argument("--monitors", nargs="+", help="monitor models to score with")
     pp.add_argument("--samples", type=int, help="scores per item (overrides the config)")
     pp.add_argument("--budget", type=float, help="spending cap in USD for this run")
+    pp.add_argument("--batch", action=argparse.BooleanOptionalAction, default=None,
+                    help="send Claude calls as Message Batches at half price (overrides the config)")
 
     a = p.parse_args(argv)
     if a.cmd == "split":
@@ -29,7 +31,7 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "pilot":
         from pcm.pilot import run_pilot
 
-        r = run_pilot(a.config, a.run_id, a.limit, a.monitors, a.samples, a.budget)
+        r = run_pilot(a.config, a.run_id, a.limit, a.monitors, a.samples, a.budget, a.batch)
         print(Path("runs", a.run_id, "report.md").read_text())
         print(f"Status: {r['status']}; spend ${r['spend_usd']:.2f}")
 

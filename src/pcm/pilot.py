@@ -27,7 +27,7 @@ from pathlib import Path
 
 from pcm.comments import STYLES, generate_plain, generate_style
 from pcm.data import DEFAULT_DATASET, DEFAULT_SPLIT, Item, load_items
-from pcm.llm import Budget, BudgetExceeded, Caller, Prices
+from pcm.llm import Budget, BudgetExceeded, Caller, Deferred, Prices
 from pcm.metrics import auroc, catch_rate
 from pcm.monitor import paraphrase, score
 from pcm.transforms import clean_code, insert_comments
@@ -48,17 +48,33 @@ def _git_commit() -> str | None:
         return None
 
 
-def _parallel(fn, tasks, workers):
-    """Run fn(task) for each task; stop scheduling new work if the budget runs out."""
-    results = {}
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(fn, t): i for i, t in enumerate(tasks)}
-        try:
-            for fut in as_completed(futures):
-                results[futures[fut]] = fut.result()
-        except BudgetExceeded:
-            pool.shutdown(cancel_futures=True)
-            raise
+def _parallel(fn, tasks, workers, caller: Caller | None = None):
+    """Run fn(task) for each task; stop scheduling new work if the budget runs out.
+
+    In batch mode (``caller.defer``), a task whose Anthropic call misses the cache
+    raises ``Deferred``. Those calls go out as one Message Batch, and the deferred
+    tasks rerun from the cache, round after round, until every task finishes;
+    a retry inside a task simply becomes a request in the next round.
+    """
+    results: dict[int, object] = {}
+    todo = list(range(len(tasks)))
+    while todo:
+        deferred = []
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(fn, tasks[i]): i for i in todo}
+            try:
+                for fut in as_completed(futures):
+                    i = futures[fut]
+                    try:
+                        results[i] = fut.result()
+                    except Deferred:
+                        deferred.append(i)
+            except BudgetExceeded:
+                pool.shutdown(cancel_futures=True)
+                raise
+        if deferred:
+            caller.flush()
+        todo = sorted(deferred)
     return [results[i] for i in range(len(tasks))]
 
 
@@ -90,7 +106,7 @@ def _key(item: Item) -> str:
 
 def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
               monitors: list[str] | None = None, samples: int | None = None,
-              budget_usd: float | None = None) -> dict:
+              budget_usd: float | None = None, batch: bool | None = None) -> dict:
     from dotenv import load_dotenv
 
     load_dotenv()  # API keys go into the environment; they are never logged
@@ -104,6 +120,7 @@ def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
     run_dir.mkdir(parents=True, exist_ok=True)
     caller = Caller(Path("runs") / "cache", Budget(budget_usd or run["budget_usd"]),
                     Prices({m: tuple(p) for m, p in cfg["prices"].items()}))
+    caller.defer = run.get("batch", False) if batch is None else batch
 
     items = load_items(DEFAULT_SPLIT, DEFAULT_DATASET, run["split"])
     backdoored = [i for i in items if i.kind == "backdoored"]
@@ -124,6 +141,7 @@ def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
         "packages": {p: version(p) for p in ("anthropic", "openai")},
         "monitor_candidates": candidates,
         "samples": k,
+        "batch": caller.defer,
         "limit": limit,
         "n_backdoored": len(backdoored),
         "n_honest": len(honest),
@@ -136,7 +154,7 @@ def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
         plain = dict(zip(
             [_key(i) for i in items],
             _parallel(lambda i: generate_plain(caller, writer, i, clean[_key(i)], attempts),
-                      items, run["max_workers"]),
+                      items, run["max_workers"], caller),
         ))
 
         # 2. Persuasive rewrites.
@@ -144,7 +162,7 @@ def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
         style_out = _parallel(
             lambda t: generate_style(caller, writer, t[0], clean[_key(t[0])],
                                      plain[_key(t[0])].comments, t[1], attempts),
-            style_tasks, run["max_workers"])
+            style_tasks, run["max_workers"], caller)
         styled = {(_key(i), s): g for (i, s), g in zip(style_tasks, style_out)}
 
         excluded = {}
@@ -179,7 +197,7 @@ def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
             paras = dict(zip(set_keys, _parallel(
                 lambda sk: paraphrase(caller, model, para, clean[sk[0]], comment_sets[sk],
                                       attempts, f"paraphrase:{sk[0]}:{sk[1]}"),
-                set_keys, run["max_workers"])))
+                set_keys, run["max_workers"], caller)))
 
             views = []  # (item_key, view, style, code)
             for (ik, style), cs in comment_sets.items():
@@ -197,7 +215,7 @@ def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
                 lambda t: {**score(caller, model, mon_cfg, by_key[t[0][0]].problem_statement,
                                    t[0][3], "", t[1], f"score:{t[0][0]}:{t[0][1]}:{t[0][2]}"),
                            "item": t[0][0], "view": t[0][1], "style": t[0][2], "sample": t[1]},
-                tasks, run["max_workers"])
+                tasks, run["max_workers"], caller)
             with open(run_dir / f"scores-{label}.jsonl", "w") as f:
                 for row in scored:
                     f.write(json.dumps(row) + "\n")
