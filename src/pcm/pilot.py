@@ -62,16 +62,24 @@ def _parallel(fn, tasks, workers):
     return [results[i] for i in range(len(tasks))]
 
 
+def _label(cand: dict) -> str:
+    """"model@effort", plus "-nothink" when the candidate scores with thinking off."""
+    return f"{cand['model']}@{cand['effort']}" + ("" if cand.get("thinking", True) else "-nothink")
+
+
 def _candidates(mon: dict, names: list[str] | None) -> list[dict]:
-    """Monitor candidates from the config, or from names like "model" or "model@effort"."""
+    """Monitor candidates from the config, or from names like "model", "model@effort"
+    or a configured label such as "model@low-nothink"."""
     configured = mon["candidates"]
     if not names:
         return configured
     out = []
     for name in names:
         model, _, effort = name.partition("@")
-        matches = [c for c in configured
-                   if c["model"] == model and (not effort or c["effort"] == effort)]
+        matches = [c for c in configured if _label(c) == name]
+        matches = matches or [c for c in configured if c["model"] == model
+                              and c.get("thinking", True)
+                              and (not effort or c["effort"] == effort)]
         out.extend(matches or [{"model": model, "effort": effort or mon["effort"]}])
     return out
 
@@ -166,7 +174,7 @@ def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
         # 3 and 4. Paraphrase and score with each monitor candidate.
         report["monitors"] = {}
         for cand in candidates:
-            model, label = cand["model"], f"{cand['model']}@{cand['effort']}"
+            model, label = cand["model"], _label(cand)
             set_keys = list(comment_sets)
             paras = dict(zip(set_keys, _parallel(
                 lambda sk: paraphrase(caller, model, para, clean[sk[0]], comment_sets[sk],
@@ -183,7 +191,8 @@ def run_pilot(config_path: Path, run_id: str, limit: int | None = None,
                 views.append((_key(i), "stripped", "none", clean[_key(i)]))
 
             tasks = [(v, s) for v in views for s in range(k)]
-            mon_cfg = {"effort": cand["effort"], "max_output_tokens": mon["max_output_tokens"]}
+            mon_cfg = {"effort": cand["effort"], "max_output_tokens": mon["max_output_tokens"],
+                       "thinking": cand.get("thinking", True)}
             scored = _parallel(
                 lambda t: {**score(caller, model, mon_cfg, by_key[t[0][0]].problem_statement,
                                    t[0][3], "", t[1], f"score:{t[0][0]}:{t[0][1]}:{t[0][2]}"),

@@ -56,10 +56,12 @@ def provider_for(model: str) -> str:
 NO_EFFORT_MODELS = ("claude-haiku-4-5",)
 
 
-def build_request(model: str, effort: str, prompt: str, step: str, max_output: int) -> dict:
+def build_request(model: str, effort: str, prompt: str, step: str, max_output: int,
+                  thinking: bool = True) -> dict:
     """A provider-specific request. Current Claude monitors and paraphrasers think
-    adaptively at the given effort; Haiku 4.5 runs with thinking off and no effort;
-    OpenAI models use their reasoning effort."""
+    adaptively at the given effort, or not at all with ``thinking=False`` (Haiku 5.5
+    accepts disabled thinking at effort high or below); Haiku 4.5 runs with thinking
+    off and no effort; OpenAI models use their reasoning effort."""
     req = {"provider": provider_for(model), "model": model, "effort": effort,
            "prompt": prompt, "step": step}
     if req["provider"] == "anthropic":
@@ -67,7 +69,7 @@ def build_request(model: str, effort: str, prompt: str, step: str, max_output: i
         if model.startswith(NO_EFFORT_MODELS):
             del req["effort"]
         else:
-            req["thinking"] = {"type": "adaptive"}
+            req["thinking"] = {"type": "adaptive" if thinking else "disabled"}
     else:
         req["max_output_tokens"] = max_output
     return req

@@ -76,3 +76,14 @@ def test_pilot_with_openai_fallback_monitor(tmp_path, monkeypatch):
     m = r["monitors"]["gpt-6-luna@medium"]
     assert m["unparsed_scores"] == 0 and m["paraphrase"]["failed"] == 0
     assert m["score_calls"] == 2 * 9 + 4 * 3
+
+
+def test_candidate_selection_by_label():
+    from pcm.pilot import _candidates, _label
+    mon = {"effort": "medium", "candidates": [
+        {"model": "claude-haiku-5-5", "effort": "low"},
+        {"model": "claude-haiku-5-5", "effort": "low", "thinking": False}]}
+    off = _candidates(mon, ["claude-haiku-5-5@low-nothink"])
+    assert [_label(c) for c in off] == ["claude-haiku-5-5@low-nothink"]
+    on = _candidates(mon, ["claude-haiku-5-5@low"])
+    assert [_label(c) for c in on] == ["claude-haiku-5-5@low"]

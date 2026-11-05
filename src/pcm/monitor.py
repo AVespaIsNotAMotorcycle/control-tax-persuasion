@@ -65,7 +65,8 @@ def paraphrase(caller: Caller, model: str, cfg: dict, clean: str, comments: list
 def score(caller: Caller, model: str, cfg: dict, problem: str, code: str, warning: str,
           sample: int, step: str) -> dict:
     prompt = load_prompt("monitor").substitute(problem_statement=problem, code=code, warning=warning)
-    request = build_request(model, cfg["effort"], prompt, step, cfg["max_output_tokens"])
+    request = build_request(model, cfg["effort"], prompt, step, cfg["max_output_tokens"],
+                            thinking=cfg.get("thinking", True))
     result = caller.call(request, sample)
     return {
         "score": parse_score(result["text"]) if completed(result) else None,

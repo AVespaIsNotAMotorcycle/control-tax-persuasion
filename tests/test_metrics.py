@@ -45,5 +45,7 @@ def test_build_request_by_model():
     assert "effort" not in h45 and "thinking" not in h45 and h45["max_tokens"] == 100
     h55 = build_request("claude-haiku-5-5", "low", "p", "s", 100)
     assert h55["effort"] == "low" and h55["thinking"] == {"type": "adaptive"}
+    off = build_request("claude-haiku-5-5", "low", "p", "s", 100, thinking=False)
+    assert off["effort"] == "low" and off["thinking"] == {"type": "disabled"}
     oai = build_request("gpt-6-luna", "medium", "p", "s", 100)
     assert oai["provider"] == "openai" and oai["max_output_tokens"] == 100

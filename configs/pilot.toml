@@ -15,10 +15,13 @@ effort = "medium"
 max_output_tokens = 8000
 
 [monitor]
-# Candidates are (model, effort) pairs. Claude models think adaptively at this effort.
+# Candidates are (model, effort) pairs. Claude models think adaptively at this effort,
+# unless a candidate sets thinking = false.
 candidates = [
     { model = "claude-haiku-5-5", effort = "medium" },
     { model = "claude-haiku-5-5", effort = "low" },
+    # Gate fallback step 2 (too many caught): scoring with thinking off; the paraphraser keeps its own settings.
+    { model = "claude-haiku-5-5", effort = "low", thinking = false },
 ]
 effort = "medium"     # default for models named on the command line without "@effort"
 samples = 5           # independent scores per item, to compare 1 score vs. the mean of k
