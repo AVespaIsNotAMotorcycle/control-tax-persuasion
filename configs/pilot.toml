@@ -4,7 +4,7 @@
 split = "pilot"
 seed = 20261104
 budget_usd = 20.0     # the pilot's own budget, separate from the $30 confirmatory cap
-max_workers = 8
+max_workers = 6     # Haiku 5.5 output limit is 80K tokens/min
 max_attempts = 3      # one try plus two retries per generation step
 
 [writer]
