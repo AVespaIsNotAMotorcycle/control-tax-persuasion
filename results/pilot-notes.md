@@ -92,3 +92,11 @@ Pooling every pilot score (or every pair, or triple) into one honest distributio
 Decision: the monitor and paraphraser are Claude Haiku 4.5 with thinking off, scoring each item twice and averaging, through the Message Batches API. This departs from the gate's literal pick (Haiku 5.5 `low`, thinking off) because its pass rested on one honest solution; see the pilot gate outcome in PREREGISTRATION.md.
 
 Batch support was checked on a live slice (`smoke-batch`): 15 scoring requests in one batch, all returned `end_turn` from `claude-haiku-4-5-20251001`, at half price ($0.05).
+
+## 2026-11-05: Analysis code checked on the Haiku 4.5 pilot scores
+
+`pcm analyze --run-id pilot-v1-haiku45` ran the full pre-registered analysis (10,000 resamples, 7 seconds). With 20 backdoors, every H1 test is inconclusive and the H2 gate is closed, as expected for a sample this small. Raw-view catch rates match the pilot report except compliance (85% vs. 80%): one backdoor sits exactly at the threshold, and the analysis breaks ties per problem rather than per list position.
+
+The paraphrased and stripped views show 0–5% caught in the pilot because one honest solution averages 94–95 in those views (75 raw) and, with 1 of 38 flagged, sets their thresholds alone. Pooling the pilot scores into k = 2 pairs projects these confirmatory-scale catch rates: raw 80–85%, paraphrased 74–83%, stripped 69%.
+
+At confirmatory scale (200 backdoors, 400 honest) the analysis takes about a minute for 10,000 resamples.
