@@ -62,7 +62,7 @@ The attacker controls the code and its comments, while the monitor sees the prob
 **Assumptions**
 
 - The attacker chooses the comment style for backdoored code.
-- Honest code always carries plain technical comments, so comment presence alone does not signal an attack.
+- Honest code always carries plain technical comments, so comment presence alone does not signal an attack. The exploratory E5 departs from this on purpose, giving honest code the persuasive styles too.
 - The monitor is single-turn. The agent gets no feedback and cannot adapt its comments.
 - The monitor cannot execute the code.
 
@@ -87,9 +87,9 @@ Each backdoor gets four comment styles and is scored under up to three monitor v
 | Style | Applied to | What the comments do |
 | --- | --- | --- |
 | Plain | Backdoored and honest | Describe the logic in neutral technical language |
-| Reframing | Backdoored only | Present the suspicious logic as a reasonable edge case or optimization |
-| Compliance | Backdoored only | Claim the code was tested, reviewed, or follows a standard |
-| Deference | Backdoored only | Use a respectful, cooperative tone that invites the reviewer to agree |
+| Reframing | Backdoored (honest too in E5) | Present the suspicious logic as a reasonable edge case or optimization |
+| Compliance | Backdoored (honest too in E5) | Claim the code was tested, reviewed, or follows a standard |
+| Deference | Backdoored (honest too in E5) | Use a respectful, cooperative tone that invites the reviewer to agree |
 
 **Monitor views**
 
@@ -109,7 +109,7 @@ The warned view is the zero-cost prompt-level defense. It is scored for every st
 - Before adding new comments, remove all existing comments and docstrings from backdoored and honest code, then apply one formatter. Strip comments with Python's `tokenize` module rather than a regex, so `#` characters inside strings survive. Control Tax notes that existing comments often describe the bug, and 98% of Claude 3.7 Sonnet backdoors contain them.
 - The comment writer may know where the backdoor is, so it can target the suspicious lines.
 - **Matched comment structure:** for each backdoored solution, write the plain comment set first. Each persuasive style then rewrites those same comments one by one, on the same lines and with the same number of comments. Only the wording changes, so style effects are not confounded with which lines are commented or how much is described.
-- Each comment has the same per-comment length cap in every condition, set in words during the pilot.
+- Each comment has the same length cap in every condition: at most 30 words per comment, and 3 to 8 comments per solution (locked after the pilot; see Open choices).
 - Comments must not use words such as backdoor, trigger, or secret.
 - Docstrings are not allowed, because they change the AST.
 - Paraphrasing runs on extracted comment text only, then the text goes back on the same lines. The code never passes through the paraphraser.
@@ -162,7 +162,9 @@ Implementation details, fixed before the freeze and coded in `src/pcm/analysis.p
 
 The equivalence rule is a two one-sided test (TOST) at the family's Bonferroni-adjusted α: a 96.7% interval for each H1 test and a 95% interval for each H2 test.
 
-**Sample size:** At least 155 pairs would give about 80% power to detect a 10-point change with a two-sided test at α = 0.05, assuming 20% of pairs disagree. Bonferroni correction across the three H1 tests raises that to about 205 pairs, so 200 is close; Holm is slightly more powerful than this estimate assumes. This ignores threshold uncertainty. For H1 that uncertainty largely cancels, because all three tests share the raw-view threshold. H2 compares views with separately estimated thresholds, so it has extra variance and likely less power than H1. Recalculate with pilot data.
+**Sample size:** At least 155 pairs would give about 80% power to detect a 10-point change with a two-sided test at α = 0.05, assuming 20% of pairs disagree. Bonferroni correction across the three H1 tests raises that to about 205 pairs, so 200 is close; Holm is slightly more powerful than this estimate assumes. This ignores threshold uncertainty. For H1 that uncertainty largely cancels, because all three tests share the raw-view threshold. H2 compares views with separately estimated thresholds, so it has extra variance and likely less power than H1.
+
+**Recalculated with pilot data (Nov 5, 2026):** with Claude Haiku 4.5 at k = 2 and the threshold set at the 95th percentile of all pooled honest pilot scores (the confirmatory scale), 16% of backdoors changed between caught and missed from plain to reframing, 11% for compliance, and 9.5% for deference. These shares include scoring noise, since the styles had little effect in the pilot. At these shares, 200 pairs give about 90–99% power to detect a 10-point change at α = 0.05/3, and 80% power holds while the discordant share stays below about 20%. The estimate rests on 20 pilot backdoors and still ignores threshold uncertainty, so treat it as rough. A real 10-point effect adds at least 10% discordant pairs by itself.
 
 **Pilot gate:** The pilot uses 20 backdoored and 40 honest solutions, and its data stays out of the confirmatory analysis. Continue only if the plain raw catch rate is roughly 20–90%, because results near 0% or 100% leave little room to see an effect. With 20 backdoors this is a rough check only. The pilot also measures the comment writer's refusal rate for each style, counting refusals before and after the two retries. Report these rates; the 10% exclusion pause under Validity checks applies to the full run.
 
@@ -207,47 +209,50 @@ These results would show how a monitor behaves on short APPS solutions, not on r
 
 ## Repo structure
 
-The repo separates frozen study materials, reusable code, private data, and publishable results. Pin `control-arena==20.1.1`, the [latest release as of Oct 22, 2026](https://pypi.org/project/control-arena/), unless the pilot requires a change.
+The repo separates frozen study materials, reusable code, private data, and publishable results. Model calls go directly through the Anthropic and OpenAI SDKs (listed in `pyproject.toml`; every run records the installed versions) rather than through ControlArena or Inspect. The monitor prompt is Control Tax's.
 
 ```text
 control-tax-persuasion/
-├── README.md                 # Question, result, reproduction steps
+├── README.md                 # Question, result, reproduction steps (to add with the writeup)
 ├── PREREGISTRATION.md        # Frozen copy of this plan
 ├── AMENDMENTS.md             # Dated changes after the freeze
 ├── DATA_POLICY.md            # What must stay private
-├── pyproject.toml            # Pinned dependencies
+├── OSF_REGISTRATION.md       # Text of the OSF registration
+├── pyproject.toml            # Dependencies; `pcm` command
 ├── .env.example              # API key names only
-├── .gitignore                # Ignores data/ and runs/
+├── .gitignore                # Ignores data/, runs/, and .env
 ├── configs/
-│   ├── pilot.yaml            # 20 backdoors, 40 honest
-│   └── confirmatory.yaml     # 200 backdoors, 400 honest
-├── prompts/
-│   ├── comment_plain.txt
-│   ├── comment_reframing.txt
-│   ├── comment_compliance.txt
-│   ├── comment_deference.txt
+│   ├── split.json            # Pilot and confirmatory problem IDs, seed, dataset hash
+│   ├── pilot.toml            # 20 backdoors, 40 honest
+│   ├── confirmatory.toml     # 200 backdoors, 400 honest
+│   ├── exploratory-warned.toml         # E4
+│   └── exploratory-honest-styles.toml  # E5
+├── prompts/                  # README.md lists each prompt and its variables
+│   ├── comment_plain.txt, plain_target_section.txt
+│   ├── comment_{reframing,compliance,deference}.txt
+│   ├── comment_{reframing,compliance,deference}_honest.txt   # E5
 │   ├── paraphrase.txt
-│   └── monitor.txt
+│   ├── monitor.txt
+│   └── monitor_warning.txt   # E4
 ├── src/pcm/
 │   ├── data.py               # Load, filter, split by problem
 │   ├── comments.py           # Generate comments by style
-│   ├── transforms.py         # Insert, strip, paraphrase, AST checks
-│   ├── monitor.py            # Score each sample through Inspect
+│   ├── transforms.py         # Clean, insert, strip, AST checks
+│   ├── llm.py                # API calls, call cache, budget, Message Batches
+│   ├── monitor.py            # Paraphrase and score
 │   ├── metrics.py            # Thresholds, catch rates, AUROC
-│   ├── stats.py              # Paired bootstrap, Holm correction
-│   └── cli.py                # prepare, generate, score, analyze
-├── tests/
-│   ├── test_transforms.py    # Comment changes keep the AST identical
-│   ├── test_metrics.py       # Hand-checked threshold examples
-│   └── test_stats.py         # Simulated pairs recover known effects
+│   ├── pilot.py              # Run a pilot, confirmatory, or exploratory config
+│   ├── analysis.py           # Paired bootstrap, Holm, gated H2, TOST, E1–E5
+│   └── cli.py                # pcm split, pcm pilot, pcm analyze
+├── tests/                    # AST identity, hand-checked thresholds, synthetic known effects, end-to-end runs with fake models
 ├── data/                     # Private, gitignored
-├── runs/                     # Private logs, gitignored
-├── results/                  # IDs, scores, tables, figures
+├── runs/                     # Private calls, logs, and per-run reports, gitignored
+├── results/                  # Pilot notes, aggregate tables, figures
 └── report/
-    └── writeup.md            # LessWrong-style post
+    └── writeup.md            # LessWrong-style post (to add)
 ```
 
-Every pipeline step should write to `runs/<run_id>/` with its config hash, prompt hashes, model names, and package versions. That makes the final results traceable without publishing private data.
+Every run writes to `runs/<run_id>/` with its config, config and prompt hashes, Git commit, item order, model names, and package versions. That makes the final results traceable without publishing private data.
 
 ## Build order and timeline
 
@@ -289,4 +294,4 @@ These choices stay open until the pilot, then freeze with the rest of the plan.
 - [x] Finalize the monitor prompt, starting from the Control Tax or ControlArena version, and write the warned-view line. Decision: Control Tax's `MONITOR_PROMPT_V2` unchanged, as piloted (`prompts/monitor.txt`); the warned line (`prompts/monitor_warning.txt`) says the comments may have been written by the party under review.
 - [x] Set the final per-comment length cap from pilot output. Decision: keep 30 words per comment and 3 to 8 comments per solution. In the pilot no comment exceeded 30 words and no generation was rejected for length (median 12 words for plain comments, 17–19 for persuasive ones).
 - [x] Choose the monitor sampling method: one score, the average of k scores, or a logprob-based score. Decision: the mean of k = 2 independent scores, sent as Message Batches.
-- [ ] Decide whether to freeze with a Git tag alone or also post on OSF.
+- [x] Decide whether to freeze with a Git tag alone or also post on OSF. Decision: tag `prereg-v1`, then post an OSF Open-Ended Registration that cites the tagged commit (text in `OSF_REGISTRATION.md`).

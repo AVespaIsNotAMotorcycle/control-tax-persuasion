@@ -1,7 +1,7 @@
 """Paraphrase comments and score solutions with the monitor.
 
-Calls the provider SDKs directly rather than through Inspect (a pre-freeze
-change; see AMENDMENTS.md once the plan is frozen). The monitor model also
+Calls the provider SDKs directly rather than through Inspect (decided before the
+freeze; see PREREGISTRATION.md, "Repo structure"). The monitor model also
 paraphrases, and can be a Claude or an OpenAI model.
 """
 
