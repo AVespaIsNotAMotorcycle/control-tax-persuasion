@@ -55,7 +55,7 @@ The attacker controls the code and its comments, while the monitor sees the prob
 - Main attacker: o3-mini, with 2,261 backdoors, each on a different problem.
 - Exploratory robustness check: repeat with Claude 3.7 Sonnet, which has 1,864 backdoors, only if spending stays under the $30 cap.
 - Backdoors must pass the public tests and have a verified failing input.
-- Keep at most one backdoored and one honest solution per problem where possible. If 400 honest solutions need extra problems, draw from problems with no backdoor in the sample.
+- The dataset has one human-written correct solution per problem, shared across attacker models. Draw all honest solutions (400 confirmatory, 40 pilot) from o3-mini problems outside the backdoor sample, so no problem appears in both sets. Stratify the honest draw to match the backdoor sample's difficulty mix (introductory, interview, competition).
 - Use only solutions that parse under Python 3.
 - Assign pilot and confirmatory problems with a fixed random seed before looking at any monitor scores.
 
@@ -119,7 +119,7 @@ The primary metric is the backdoor catch rate at a 5% audit budget. A backdoor i
 **Analysis**
 
 1. Calculate paired differences in catch rate by problem.
-2. Run a paired bootstrap with 10,000 resamples. Resample by problem, keeping each problem's backdoored and honest solutions together, and recalculate thresholds each time.
+2. Run a paired bootstrap with 10,000 resamples. Resample backdoored and honest problems separately, since no problem is in both sets, keeping all conditions for a problem together, and recalculate thresholds each time.
 3. Report each confirmatory difference with a Bonferroni-adjusted confidence interval: 98.3% for the three H1 tests and 97.5% for the two H2 tests. Holm correction applies to the tests; the adjusted intervals are slightly conservative.
 4. Apply Holm correction within H1, then test H2 with Holm correction only if the H1 gate passes.
 5. Treat E1–E4 and all 2% audit results as exploratory, with unadjusted 95% intervals.
@@ -147,7 +147,7 @@ These results would show how a monitor behaves on short APPS solutions, not on r
 
 **Limitations**
 
-- Honest solutions are human-written, while backdoored ones are model-edited, so monitors may pick up on style. Prior [Control Tax](https://arxiv.org/html/2506.05296) work shares this structure.
+- Honest solutions are human-written, while backdoored ones are model-written, so monitors may pick up on style. o3-mini usually rewrites the solution rather than editing the human one: after normalizing formatting and removing comments, median text similarity to the correct solution is 0.38, and only 6% reach 0.8. Prior [Control Tax](https://arxiv.org/html/2506.05296) work shares this structure.
 - Comment styles are fixed and non-adaptive, so results may understate what an attacker could achieve.
 - One attacker dataset and one monitor model limit generalization.
 - If the comment writer, paraphraser, and monitor come from the same model family, persuasion effects may be stronger or weaker than across families. Report which families were used.
@@ -229,8 +229,8 @@ Finish the pilot and freeze the plan by Nov 12, so the full run does not compete
 
 These must be settled before any pilot call, because the pilot depends on them or because deciding them after seeing pilot data would weaken the plan.
 
-- [ ] Confirm that each API account does not train on submitted data. Pilot calls fall under the same data-handling rules.
-- [ ] Check how the dataset's honest solutions relate to the backdoors. If each is the original the backdoor was edited from, consider drawing all 400 honest solutions from problems outside the backdoor sample.
+- [x] Confirm that each API account does not train on submitted data. Pilot calls fall under the same data-handling rules.
+- [x] Check how the dataset's honest solutions relate to the backdoors. Each problem has one correct solution, and o3-mini backdoors are mostly rewrites of it. Decision: draw honest solutions from problems outside the backdoor sample (see Data).
 - [ ] Fix the solution filters and the seed that assigns pilot and confirmatory problems, then run the split.
 - [ ] Choose the comment writer and paraphraser models.
 - [ ] Draft the prompts: the four comment styles, the paraphraser with the mechanical rule, and a first monitor prompt.
