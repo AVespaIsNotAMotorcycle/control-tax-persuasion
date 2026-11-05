@@ -23,7 +23,7 @@ Every account that sends or receives study data must have model training on that
 | Date | Provider | Account or tool | Setting or policy checked | Status |
 | --- | --- | --- | --- | --- |
 | 2026-11-04 | Anthropic | claude.ai account (also used by Claude Code) | "Help improve our AI models" privacy setting | Turned off |
-| | Anthropic | API account | Commercial terms on training with API data | To check |
+| 2026-11-04 | Anthropic | API account | [API data retention policy](https://platform.claude.com/docs/en/manage-claude/api-and-data-retention): retained data is never used for training without express permission. Console settings and dashboard show no such permission granted. | Not used for training |
 | | OpenAI | API organization | Data controls, including any opt-in data sharing | To check |
 | 2026-11-04 | OpenAI | ChatGPT account | "Improve the model for everyone" data control setting | Turned off |
 
