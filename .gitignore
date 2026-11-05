@@ -1,0 +1,26 @@
+# Private study data and logs (see DATA_POLICY.md)
+data/
+runs/
+
+# Secrets (keep .env.example committed)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Inspect logs, in case they're written outside runs/
+logs/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
