@@ -25,6 +25,6 @@ Every account that sends or receives study data must have model training on that
 | 2026-11-04 | Anthropic | claude.ai account (also used by Claude Code) | "Help improve our AI models" privacy setting | Turned off |
 | | Anthropic | API account | Commercial terms on training with API data | To check |
 | | OpenAI | API organization | Data controls, including any opt-in data sharing | To check |
-| | OpenAI | ChatGPT (only if used for this project) | Model improvement setting | To check |
+| 2026-11-04 | OpenAI | ChatGPT account | "Improve the model for everyone" data control setting | Turned off |
 
 Re-check if an account, organization, or provider's terms change before the confirmatory run.
