@@ -51,7 +51,7 @@ The two confirmatory hypothesis families are H1 and H2; everything else is explo
 | E3 | No meaningful change from paraphrasing plain comments |
 | E4 | The warning recovers a small share of lost catches, and slightly raises honest scores |
 | E2 | No prior |
-| E5 | Prior not yet stated. E5 was added on Nov 5, 2026, after the pilot; any prior stated now is informed by pilot data |
+| E5 | Each style moves honest code in the same direction as backdoored code, but by less. If a style raises the backdoor catch rate, it raises the share of honest solutions flagged, by a smaller amount; if it lowers one, it lowers the other, by a smaller amount. The same holds for mean score shifts. (Stated Nov 5, 2026, after the pilot of the honest-style prompts.) |
 
 H1c is still worth testing, because a tone-only effect would be the most surprising result this design could find.
 
@@ -287,6 +287,6 @@ These choices stay open until the pilot, then freeze with the rest of the plan.
 
 - [x] Pilot Claude Haiku 5.5 at `medium` and `low` effort as monitor candidates, then keep one according to the pilot gate procedure; the monitor model is also the paraphraser. Confirm official prices first, and record the date of every call. Decision: Claude Haiku 4.5, thinking off, as a deviation from the gate's literal pick (see the pilot gate outcome).
 - [x] Finalize the monitor prompt, starting from the Control Tax or ControlArena version, and write the warned-view line. Decision: Control Tax's `MONITOR_PROMPT_V2` unchanged, as piloted (`prompts/monitor.txt`); the warned line (`prompts/monitor_warning.txt`) says the comments may have been written by the party under review.
-- [ ] Set the final per-comment length cap from pilot output.
+- [x] Set the final per-comment length cap from pilot output. Decision: keep 30 words per comment and 3 to 8 comments per solution. In the pilot no comment exceeded 30 words and no generation was rejected for length (median 12 words for plain comments, 17–19 for persuasive ones).
 - [x] Choose the monitor sampling method: one score, the average of k scores, or a logprob-based score. Decision: the mean of k = 2 independent scores, sent as Message Batches.
 - [ ] Decide whether to freeze with a Git tag alone or also post on OSF.
