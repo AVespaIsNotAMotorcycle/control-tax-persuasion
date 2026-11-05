@@ -37,3 +37,13 @@ def test_auroc():
 ])
 def test_parse_score(text, expected):
     assert parse_score(text) == expected
+
+
+def test_build_request_by_model():
+    from pcm.llm import build_request
+    h45 = build_request("claude-haiku-4-5-20251001", "off", "p", "s", 100)
+    assert "effort" not in h45 and "thinking" not in h45 and h45["max_tokens"] == 100
+    h55 = build_request("claude-haiku-5-5", "low", "p", "s", 100)
+    assert h55["effort"] == "low" and h55["thinking"] == {"type": "adaptive"}
+    oai = build_request("gpt-6-luna", "medium", "p", "s", 100)
+    assert oai["provider"] == "openai" and oai["max_output_tokens"] == 100

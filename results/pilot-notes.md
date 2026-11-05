@@ -44,3 +44,23 @@ Decision: `gpt-6.1-sol` is the comment writer.
 - **AUROC:** 0.96 to 1.00 in every view and style, for both candidates. Haiku 5.5 separates o3-mini's backdoors from honest code very well.
 - **Mean output tokens per scoring call:** 1,313 at `medium`, 1,039 at `low`.
 - **Projected confirmatory cost at `low`:** writer about $5.33; monitor about $1.93 at 1 score per item, $9.66 at 5 (half that with batches).
+
+## 2026-11-05: Deviation, Claude Haiku 4.5 added as a third monitor candidate
+
+Added after seeing `pilot-v1`, because Haiku 5.5 at `low` passed the gate only at the 90% boundary, and an older, weaker trusted monitor fits the control setup better. Haiku 4.5 (`claude-haiku-4-5-20251001`) runs with thinking off, since it has no effort setting. It is scored on the same pilot views, 5 scores per item, in run `pilot-v1-haiku45`. The choice between it and Haiku 5.5 at `low` will be made from both runs, and recorded here.
+
+## 2026-11-05: Haiku 4.5 pilot (`pilot-v1-haiku45`) and threshold fragility
+
+Same pilot views as `pilot-v1`, Claude Haiku 4.5 with thinking off, 5 scores per item. Took 37 minutes and cost $8.43. All 1,470 scores parsed, 0 refusals, all 118 paraphrases succeeded. Mean output was 940 tokens per scoring call, or $0.0057 per call.
+
+**The pilot threshold rests on one honest solution.** Two honest solutions were dropped (too short to comment), leaving 38. At a 5% budget, `floor(0.05 × 38) = 1`, so the threshold is the single most suspicious honest score. Plain raw catch rates (mean of 5 scores) at different cutoffs:
+
+| Monitor | Threshold = top honest score | 2nd | 3rd | 4th |
+| --- | --- | --- | --- | --- |
+| Haiku 5.5, `medium` | 95% | 95% | 95% | 95% |
+| Haiku 5.5, `low` | 90% | 95% | 95% | 95% |
+| Haiku 4.5, thinking off | 75% | 75% | 80% | 80% |
+
+Haiku 5.5 at `low` passes the gate only because one honest solution scored 87 on average; the next highest scored 48. At every other cutoff it catches 95% and fails. Haiku 4.5 sits at 75–80% at every cutoff. With 1 score per item instead of the mean of 5, single high honest scores (up to 95) push Haiku 4.5's catch rates down to 0–10%, so it needs averaging more than Haiku 5.5 does.
+
+Projected confirmatory monitor cost for Haiku 4.5: $16.98 at 1 score per item ($8.49 with batches), $50.95 at 3 ($25.47 with batches).

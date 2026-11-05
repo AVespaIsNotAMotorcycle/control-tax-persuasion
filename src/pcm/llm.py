@@ -52,14 +52,22 @@ def provider_for(model: str) -> str:
     return "anthropic" if model.startswith("claude-") else "openai"
 
 
+# Claude models without an effort setting or adaptive thinking; they run with thinking off.
+NO_EFFORT_MODELS = ("claude-haiku-4-5",)
+
+
 def build_request(model: str, effort: str, prompt: str, step: str, max_output: int) -> dict:
-    """A provider-specific request. Claude monitors and paraphrasers think adaptively
-    at the given effort; OpenAI models use their reasoning effort."""
+    """A provider-specific request. Current Claude monitors and paraphrasers think
+    adaptively at the given effort; Haiku 4.5 runs with thinking off and no effort;
+    OpenAI models use their reasoning effort."""
     req = {"provider": provider_for(model), "model": model, "effort": effort,
            "prompt": prompt, "step": step}
     if req["provider"] == "anthropic":
         req["max_tokens"] = max_output
-        req["thinking"] = {"type": "adaptive"}
+        if model.startswith(NO_EFFORT_MODELS):
+            del req["effort"]
+        else:
+            req["thinking"] = {"type": "adaptive"}
     else:
         req["max_output_tokens"] = max_output
     return req
@@ -139,12 +147,16 @@ class Caller:
 
         client = self._anthropic_client()
         try:
+            kwargs = {}
+            if "thinking" in req:
+                kwargs["thinking"] = req["thinking"]
+            if "effort" in req:
+                kwargs["output_config"] = {"effort": req["effort"]}
             resp = client.messages.create(
                 model=req["model"],
                 max_tokens=req["max_tokens"],
-                thinking=req.get("thinking", {"type": "between_tools"}),
-                output_config={"effort": req["effort"]},
                 messages=[{"role": "user", "content": req["prompt"]}],
+                **kwargs,
             )
         except anthropic.BadRequestError as e:
             return {"text": "", "stop_reason": "bad_request", "error": str(e),
