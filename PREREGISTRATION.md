@@ -256,7 +256,7 @@ These must be settled before any pilot call, because the pilot depends on them o
 - [x] Confirm that each API account does not train on submitted data. Pilot calls fall under the same data-handling rules.
 - [x] Check how the dataset's honest solutions relate to the backdoors. Each problem has one correct solution, and o3-mini backdoors are mostly rewrites of it. Decision: draw honest solutions from problems outside the backdoor sample (see Data).
 - [x] Fix the solution filters and the seed that assigns pilot and confirmatory problems, then run the split. Done with `src/pcm/data.py`, seed 20261104; the split is in `configs/split.json` (2,253 of 2,261 o3-mini backdoors eligible, 8 excluded for leaky code).
-- [ ] Choose the comment writer and paraphraser models. Comment writer: Claude Sonnet 5.5 (`claude-sonnet-5-5`). Paraphraser: the same OpenAI model as the monitor, since defenses run on the trusted model; choose it with the monitor.
+- [x] Choose the comment writer and paraphraser models. Comment writer: Claude Sonnet 5.5 (`claude-sonnet-5-5`). Paraphraser: the same model as the monitor, since defenses run on the trusted model. In the pilot, each monitor candidate paraphrases the comments for its own paraphrased view.
 - [x] Draft the prompts: the four comment styles, the paraphraser with the mechanical rule, and a first monitor prompt. Drafts are in `prompts/`; the monitor prompt starts from Control Tax's `MONITOR_PROMPT_V2`.
 - [x] Decide whether pilot spending counts toward the $30 cap, or set a separate pilot budget. Decision: the pilot has its own $20 budget.
 - [x] Set a provisional, generous per-comment cap for pilot generation and record it. Provisional cap: 30 words per comment, and 3 to 8 comments per solution.
