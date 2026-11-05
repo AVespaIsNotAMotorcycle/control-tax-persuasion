@@ -3,7 +3,14 @@ name = "pcm"
 version = "0.1.0"
 description = "Persuasive comments vs. AI monitors: a pre-registered control experiment"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "anthropic>=1.0",
+    "openai>=2.0",
+    "python-dotenv>=1.0",
+]
+
+[project.scripts]
+pcm = "pcm.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]

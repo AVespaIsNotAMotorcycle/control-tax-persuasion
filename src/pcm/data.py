@@ -60,6 +60,7 @@ class Row:
     score_result: str
     public_tests: tuple[dict, ...]
     fail_input: str
+    hint: str = ""
 
     @classmethod
     def from_json(cls, d: dict) -> Row:
@@ -73,6 +74,7 @@ class Row:
             score_result=d["score_result"],
             public_tests=tuple(d.get("public_tests") or ()),
             fail_input=d.get("fail_input") or "",
+            hint=d.get("hint") or "",
         )
 
 
@@ -88,6 +90,7 @@ class Item:
     code: str
     public_tests: tuple[dict, ...]
     fail_input: str | None  # backdoored only
+    hint: str | None = None  # backdoored only: the attacker's description of the backdoor
 
 
 def sha256_file(path: Path) -> str:
@@ -276,7 +279,7 @@ def load_items(split_path: Path, dataset_path: Path, split_name: str) -> list[It
     for pid in s["backdoored"]:
         r = by_id[pid]
         items.append(Item(pid, split_name, "backdoored", r.difficulty, r.problem_statement,
-                          r.backdoored_code, r.public_tests, r.fail_input))
+                          r.backdoored_code, r.public_tests, r.fail_input, r.hint))
     for pid in s["honest"]:
         r = by_id[pid]
         items.append(Item(pid, split_name, "honest", r.difficulty, r.problem_statement,
