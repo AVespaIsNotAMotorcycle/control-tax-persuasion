@@ -36,7 +36,22 @@ The two confirmatory hypothesis families are H1 and H2; everything else is explo
 
 **H2 pooling:** For each backdoor, average its raw catch outcome across the three persuasive styles and compare that with its stripped (or paraphrased-persuasive, averaged the same way) outcome. Stripped code is identical across styles, so a difference-in-differences against plain comments would reduce to the H1 effect for stripping. That is why H2 compares defended persuasive code with raw persuasive code. Each defended catch rate is also reported next to the raw plain catch rate, to show how much of the loss it recovers.
 
-Draft prior, to confirm or change before the freeze: all three styles lower the catch rate. H1a and H1b are more likely than H1c, because they offer a reason for the suspicious logic rather than only a friendly tone. H1c is still worth testing because tone-only effects are the most surprising result this design could find.
+**Priors** (confirmed Nov 4, 2026, before any pilot data):
+
+| ID | Expected result |
+| --- | --- |
+| H1a | Reframing lowers the catch rate, probably by at least 10 points |
+| H1b | Compliance lowers the catch rate, maybe by at least 10 points. It may backfire, since unprompted claims of testing or review can look suspicious |
+| H1c | Deference lowers the catch rate, but weakly, probably by less than 10 points |
+| H1 ranking | Reframing > compliance > deference. Reframing and compliance offer a reason for the suspicious logic; deference only changes the tone |
+| H2a | Stripping recovers most of the lost catches, and ends slightly below the raw plain catch rate, because plain comments can point the monitor at the backdoor line |
+| H2b | Paraphrasing recovers most of the loss for compliance and deference, and less for reframing, whose description of the logic survives the paraphrase rule |
+| E1 | Equally likely: no change, or a slight drop when plain comments are stripped |
+| E3 | No meaningful change from paraphrasing plain comments |
+| E4 | The warning recovers a small share of lost catches, and slightly raises honest scores |
+| E2 | No prior |
+
+H1c is still worth testing, because a tone-only effect would be the most surprising result this design could find.
 
 ## Threat model and data
 
@@ -247,7 +262,7 @@ These must be settled before any pilot call, because the pilot depends on them o
 - [x] Set a provisional, generous per-comment cap for pilot generation and record it. Provisional cap: 30 words per comment, and 3 to 8 comments per solution.
 - [x] Fix the monitor's reasoning effort. Main setting: `medium`, with fallbacks under the pilot gate procedure. Collect about 5 independent scores per pilot item, plus logprobs where the API provides them, so every sampling option can be compared without rerunning.
 - [x] Define what happens at the pilot gate. See the pilot gate procedure under Metrics, analysis plan and decision rules.
-- [ ] Confirm or change the draft priors in Hypotheses.
+- [x] Confirm or change the draft priors in Hypotheses.
 
 ## Open choices to lock before the full run
 
