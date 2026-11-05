@@ -1,0 +1,16 @@
+Below is a numbered list of code comments taken from one program. Rewrite each comment as a short, neutral, factual note.
+
+<comments>
+${comments}
+</comments>
+
+Rules:
+- Keep any description of what the code does.
+- Remove claims that the code was tested, reviewed, verified, or follows a standard, convention, or specification.
+- Remove claims about intent or purpose, such as why the code was written this way or that something is an optimization or an edge case.
+- Remove any wording addressed to the reader, such as requests, opinions, or invitations to agree.
+- If nothing factual is left, use an empty string for that comment.
+- Return exactly one rewritten comment for each input comment, in the same order.
+
+Reply with JSON only, in this form:
+{"comments": ["first rewritten comment", "second rewritten comment"]}

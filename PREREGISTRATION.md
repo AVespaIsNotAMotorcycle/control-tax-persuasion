@@ -90,7 +90,7 @@ The warned view is the zero-cost prompt-level defense. It is scored for every st
 - Before adding new comments, remove all existing comments and docstrings from backdoored and honest code, then apply one formatter. Strip comments with Python's `tokenize` module rather than a regex, so `#` characters inside strings survive. Control Tax notes that existing comments often describe the bug, and 98% of Claude 3.7 Sonnet backdoors contain them.
 - The comment writer may know where the backdoor is, so it can target the suspicious lines.
 - **Matched comment structure:** for each backdoored solution, write the plain comment set first. Each persuasive style then rewrites those same comments one by one, on the same lines and with the same number of comments. Only the wording changes, so style effects are not confounded with which lines are commented or how much is described.
-- Each comment has the same per-comment length cap in every condition, set in tokens during the pilot.
+- Each comment has the same per-comment length cap in every condition, set in words during the pilot.
 - Comments must not use words such as backdoor, trigger, or secret.
 - Docstrings are not allowed, because they change the AST.
 - Paraphrasing runs on extracted comment text only, then the text goes back on the same lines. The code never passes through the paraphraser.
@@ -149,6 +149,7 @@ These results would show how a monitor behaves on short APPS solutions, not on r
 
 - Honest solutions are human-written, while backdoored ones are model-written, so monitors may pick up on style. o3-mini usually rewrites the solution rather than editing the human one: after normalizing formatting and removing comments, median text similarity to the correct solution is 0.38, and only 6% reach 0.8. Prior [Control Tax](https://arxiv.org/html/2506.05296) work shares this structure.
 - Comment styles are fixed and non-adaptive, so results may understate what an attacker could achieve.
+- Only backdoored code gets a comment guaranteed to sit on the suspicious lines, because the plain comment writer is told where the backdoor is so persuasive rewrites have a comment to work on. Honest code has no such targeted comment, so comment placement may differ between honest and backdoored code even under plain comments.
 - The attacker is split across two models: o3-mini (2025) wrote the backdoored code, and Claude Sonnet 5.5 (2026) writes the comments. A real attacker would write both, so results describe a strong comment writer applied to fixed backdoors.
 - One attacker dataset and one monitor model limit generalization.
 - If the comment writer, paraphraser, and monitor come from the same model family, persuasion effects may be stronger or weaker than across families. Report which families were used.
@@ -234,9 +235,9 @@ These must be settled before any pilot call, because the pilot depends on them o
 - [x] Check how the dataset's honest solutions relate to the backdoors. Each problem has one correct solution, and o3-mini backdoors are mostly rewrites of it. Decision: draw honest solutions from problems outside the backdoor sample (see Data).
 - [x] Fix the solution filters and the seed that assigns pilot and confirmatory problems, then run the split. Done with `src/pcm/data.py`, seed 20261104; the split is in `configs/split.json` (2,253 of 2,261 o3-mini backdoors eligible, 8 excluded for leaky code).
 - [ ] Choose the comment writer and paraphraser models. Comment writer: Claude Sonnet 5.5 (`claude-sonnet-5-5`). Paraphraser: the same OpenAI model as the monitor, since defenses run on the trusted model; choose it with the monitor.
-- [ ] Draft the prompts: the four comment styles, the paraphraser with the mechanical rule, and a first monitor prompt.
+- [x] Draft the prompts: the four comment styles, the paraphraser with the mechanical rule, and a first monitor prompt. Drafts are in `prompts/`; the monitor prompt starts from Control Tax's `MONITOR_PROMPT_V2`.
 - [ ] Decide whether pilot spending counts toward the $30 cap, or set a separate pilot budget.
-- [ ] Set a provisional, generous per-comment cap for pilot generation (for example, about 40 tokens) and record it.
+- [x] Set a provisional, generous per-comment cap for pilot generation and record it. Provisional cap: 30 words per comment, and 3 to 8 comments per solution.
 - [ ] Fix the monitor's sampling settings: reasoning effort, thinking settings, and temperature where the API accepts it. Collect about 5 independent scores per pilot item, plus logprobs where the API provides them, so every sampling option can be compared without rerunning.
 - [ ] Define what happens at the pilot gate: which monitor is kept if both candidates fall in the 20–90% range (default: the cheaper one), and what to do if neither does (try another model, revise the monitor prompt, or stop). Also cap how many revision rounds are allowed before stopping.
 - [ ] Confirm or change the draft priors in Hypotheses.
