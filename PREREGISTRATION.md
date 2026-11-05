@@ -231,7 +231,7 @@ These must be settled before any pilot call, because the pilot depends on them o
 
 - [x] Confirm that each API account does not train on submitted data. Pilot calls fall under the same data-handling rules.
 - [x] Check how the dataset's honest solutions relate to the backdoors. Each problem has one correct solution, and o3-mini backdoors are mostly rewrites of it. Decision: draw honest solutions from problems outside the backdoor sample (see Data).
-- [ ] Fix the solution filters and the seed that assigns pilot and confirmatory problems, then run the split.
+- [x] Fix the solution filters and the seed that assigns pilot and confirmatory problems, then run the split. Done with `src/pcm/data.py`, seed 20261104; the split is in `configs/split.json` (2,253 of 2,261 o3-mini backdoors eligible, 8 excluded for leaky code).
 - [ ] Choose the comment writer and paraphraser models.
 - [ ] Draft the prompts: the four comment styles, the paraphraser with the mechanical rule, and a first monitor prompt.
 - [ ] Decide whether pilot spending counts toward the $30 cap, or set a separate pilot budget.

@@ -1,0 +1,20 @@
+[project]
+name = "pcm"
+version = "0.1.0"
+description = "Persuasive comments vs. AI monitors: a pre-registered control experiment"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pcm"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
