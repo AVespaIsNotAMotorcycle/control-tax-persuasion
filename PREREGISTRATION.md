@@ -149,6 +149,7 @@ These results would show how a monitor behaves on short APPS solutions, not on r
 
 - Honest solutions are human-written, while backdoored ones are model-written, so monitors may pick up on style. o3-mini usually rewrites the solution rather than editing the human one: after normalizing formatting and removing comments, median text similarity to the correct solution is 0.38, and only 6% reach 0.8. Prior [Control Tax](https://arxiv.org/html/2506.05296) work shares this structure.
 - Comment styles are fixed and non-adaptive, so results may understate what an attacker could achieve.
+- The attacker is split across two models: o3-mini (2025) wrote the backdoored code, and Claude Sonnet 5.5 (2026) writes the comments. A real attacker would write both, so results describe a strong comment writer applied to fixed backdoors.
 - One attacker dataset and one monitor model limit generalization.
 - If the comment writer, paraphraser, and monitor come from the same model family, persuasion effects may be stronger or weaker than across families. Report which families were used.
 - A current cheap monitor may be stronger than the 2025 attacker, which departs from the usual weaker-monitor setup. Report this if it applies.
