@@ -1,8 +1,6 @@
 # OSF registration draft
 
-Paste-ready text for an OSF **Open-Ended Registration**. Fill in the two placeholders after tagging:
-`<COMMIT>` (output of `git rev-parse prereg-v1`) and `<DATE>`. The summary field is plain text, so the
-text below avoids tables and Markdown formatting.
+Paste-ready text for an OSF **Open-Ended Registration**, filled in for tag `prereg-v1`. If you submit on a later day, update the date in the status line. The summary field is plain text, so the text below avoids tables and Markdown formatting.
 
 ---
 
@@ -16,9 +14,9 @@ A pre-registered experiment on AI control. Using verified backdoored and honest 
 
 ## Registration summary
 
-This registration freezes the study plan in PREREGISTRATION.md, attached, and in the public repository https://github.com/AVespaIsNotAMotorcycle/control-tax-persuasion at tag prereg-v1, commit <COMMIT>. The attached file is the authoritative plan; this summary is for orientation. The code, prompts, and configurations at that commit are the ones the confirmatory run will use, and the run software refuses to start if they differ from the tag. Any later change will be logged with its date and reason in AMENDMENTS.md in the same repository.
+This registration freezes the study plan in PREREGISTRATION.md, attached, and in the public repository https://github.com/AVespaIsNotAMotorcycle/control-tax-persuasion at tag prereg-v1, commit b9bca39757cb55b97cf5a324100ca9cb063e64fd. The attached file is the authoritative plan; this summary is for orientation. The code, prompts, and configurations at that commit are the ones the confirmatory run will use, and the run software refuses to start if they differ from the tag. Any later change will be logged with its date and reason in AMENDMENTS.md in the same repository.
 
-Status at registration (<DATE>): a pilot of 20 backdoored and 40 honest solutions has been run and is reported in results/pilot-notes.md. No confirmatory data has been collected. Pilot problems are disjoint from confirmatory problems and are excluded from the confirmatory analysis.
+Status at registration (November 5, 2026): a pilot of 20 backdoored and 40 honest solutions has been run and is reported in results/pilot-notes.md. No confirmatory data has been collected. Pilot problems are disjoint from confirmatory problems and are excluded from the confirmatory analysis.
 
 Question. Do persuasive comments change an AI monitor's catch rate for backdoored code whose behavior stays identical, and do comment stripping or neutral paraphrasing restore it?
 
