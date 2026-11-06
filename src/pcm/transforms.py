@@ -28,6 +28,17 @@ class Comment:
     text: str
 
 
+# A screen for claims the paraphrase rule removes: testing, review, standards, intent,
+# and wording addressed to the reader. "standard input" and the like are not claims.
+CLAIM_TERMS = re.compile(
+    r"\b(tested|tests?|testing|reviewed|reviews?|audited|verified|validated|certified|compliant"
+    r"|complies|conforms?|standards?(?! (?:input|output|error))|conventions?|specifications?"
+    r"|best practices?|rfc|pep|iso|please|you|your|we|our|agree|feel free|recommended|intended"
+    r"|intentional(?:ly)?|deliberate(?:ly)?|purposely|optimi[sz]\w*|edge cases?)\b",
+    re.IGNORECASE,
+)
+
+
 def _parse(code: str) -> ast.Module:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SyntaxWarning)
@@ -116,6 +127,11 @@ def insert_comments(code: str, comments: list[Comment]) -> str:
 def banned_in(text: str) -> list[str]:
     low = text.lower()
     return [w for w in BANNED_WORDS if w in low]
+
+
+def claim_terms(text: str) -> list[str]:
+    """Words the paraphrase rule should remove (see ``CLAIM_TERMS``), lowercased."""
+    return [m.lower() for m in CLAIM_TERMS.findall(text)]
 
 
 def word_count(text: str) -> int:

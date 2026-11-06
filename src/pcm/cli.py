@@ -1,8 +1,9 @@
-"""Command line: ``pcm split``, ``pcm pilot`` and ``pcm analyze``."""
+"""Command line: ``pcm split``, ``pcm pilot``, ``pcm review`` and ``pcm analyze``."""
 
 from __future__ import annotations
 
 import argparse
+import tomllib
 from pathlib import Path
 
 
@@ -25,6 +26,10 @@ def main(argv: list[str] | None = None) -> None:
     pp.add_argument("--allow-unfrozen", action="store_true",
                     help="run even if code, configs or prompts differ from the config's require_tag")
 
+    rp = sub.add_parser("review", help="check comments and paraphrases before seeing results")
+    rp.add_argument("--run-id", required=True)
+    rp.add_argument("--monitor", help="monitor label, if the run scored more than one")
+
     ap = sub.add_parser("analyze", help="run the pre-registered analysis on a run's scores")
     ap.add_argument("--run-id", required=True)
     ap.add_argument("--monitor", help="monitor label, if the run scored more than one")
@@ -41,8 +46,17 @@ def main(argv: list[str] | None = None) -> None:
         from pcm.pilot import run_pilot
 
         r = run_pilot(a.config, a.run_id, a.limit, a.monitors, a.samples, a.budget, a.batch, a.allow_unfrozen)
-        print(Path("runs", a.run_id, "report.md").read_text())
+        with open(a.config, "rb") as f:
+            blind = tomllib.load(f)["run"].get("blind", False)
+        if blind:  # the report has catch rates; run `pcm review` before opening it
+            print(f"Report written to runs/{a.run_id}/report.md; not shown, since this run is blind.")
+        else:
+            print(Path("runs", a.run_id, "report.md").read_text())
         print(f"Status: {r['status']}; spend ${r['spend_usd']:.2f}")
+    elif a.cmd == "review":
+        from pcm.review import run_review
+
+        print(run_review(a.run_id, a.monitor))
     elif a.cmd == "analyze":
         from pcm.analysis import run_analysis
 

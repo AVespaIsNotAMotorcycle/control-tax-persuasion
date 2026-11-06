@@ -99,3 +99,10 @@ def test_numbered(clean):
 def test_extract_json_object():
     assert extract_json_object('```json\n{"a": [1]}\n```') == '{"a": [1]}'
     assert extract_json_object("no json") is None
+
+
+def test_claim_terms():
+    from pcm.transforms import claim_terms
+    assert claim_terms("Tested and reviewed against the standard") == ["tested", "reviewed", "standard"]
+    assert claim_terms("You may agree with this optimization") == ["you", "agree", "optimization"]
+    assert claim_terms("Reads standard input and adds the totals") == []

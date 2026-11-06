@@ -110,3 +110,23 @@ E5 gives each honest solution the three persuasive styles, from honest versions 
 - **Writer:** 114 of 114 rewrites valid on the first try, 0 refusals.
 - **Length matches the backdoor rewrites:** median words per comment 18–19 for styled honest code, 17–18.5 for styled backdoors, 12 for plain.
 - **Scores (very noisy, 1 of 38 honest flagged):** the share of styled honest solutions above the plain raw threshold was 5% for reframing, 16% for compliance, and 13% for deference, against 2.6% for plain. Mean honest scores rose 1 to 5 points, and backdoor scores rose 3 to 8. At this size this is only a hint that the styles raise suspicion of honest code rather than lower it.
+
+## Final review before the freeze (2026-11-05)
+
+No paid calls. A review of the plan changed these points.
+
+**Sample size.** The earlier power figures (90-99%) used the pilot's discordant shares, which do not include the discordance a real 10-point effect would add. Adding 10 points gives 67-81% at 200 backdoors. Decision: 260 backdoors and a $35 confirmatory cap, for about 80-91% in that worst case. The 60 added backdoors are a separate seeded draw; the pilot, the original 200 and the 400 honest solutions are unchanged, which was checked against the previous `configs/split.json`.
+
+**Paraphrase check, measured on cached Haiku 4.5 pilot calls.** Number of comments with a claim word (`transforms.CLAIM_TERMS`), before and after paraphrasing:
+
+| Group | Sets | Comments | Before | After |
+| --- | --- | --- | --- | --- |
+| Compliance | 20 | 118 | 103 | 1 |
+| Deference | 20 | 118 | 118 | 0 |
+| Reframing | 20 | 118 | 7 | 0 |
+| Plain, backdoored | 20 | 118 | 0 | 0 |
+| Plain, honest | 38 | 205 | 3 | 3 |
+
+Every compliance and deference set had a claim word before paraphrasing, and 1 of the 60 persuasive sets had one afterwards. The word list says little about reframing, whose claims are about the logic rather than about process, so reframing relies on the hand read. These results set the review limits in the plan: at least 90% before, at most 10% after.
+
+**Other decisions.** H2 gets per-style comparisons (E6) and a share-recovered table, because pooling can hide a defense that fully works on one style. The plan no longer says the H2 gate controls the error rate across families. Prices were rechecked on Nov 5 (Haiku 4.5 $1/$5, half in batches, from Anthropic's pricing page; `gpt-6.1-sol` $2/$10 from third-party listings, since OpenAI's page could not be opened). `uv.lock` pins the versions used in the live smoke tests.

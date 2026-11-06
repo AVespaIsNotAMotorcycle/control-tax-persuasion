@@ -58,6 +58,8 @@ def test_exclusion_reason(kwargs, reason):
 def test_split_sizes_disjoint_and_stratified():
     split = make_split(synthetic_rows(), seed=1)
     check_disjoint(split)
+    # With nothing added, honest solutions match the backdoors' difficulty mix two to one.
+    split = make_split(synthetic_rows(), seed=1, added={})
     for name, size in (("pilot", 20), ("confirmatory", 200)):
         s = split["splits"][name]
         assert len(s["backdoored"]) == size
@@ -65,6 +67,21 @@ def test_split_sizes_disjoint_and_stratified():
         assert s["difficulty"]["honest"] == {
             d: 2 * n for d, n in s["difficulty"]["backdoored"].items()
         }
+
+
+def test_added_backdoors_leave_every_earlier_draw_unchanged():
+    rows = synthetic_rows()
+    base = make_split(rows, seed=1, added={})["splits"]
+    grown = make_split(rows, seed=1)
+    check_disjoint(grown)
+    new = grown["splits"]
+    assert new["pilot"]["backdoored"] == base["pilot"]["backdoored"]
+    assert new["pilot"]["honest"] == base["pilot"]["honest"]
+    assert new["confirmatory"]["honest"] == base["confirmatory"]["honest"]
+    assert len(new["confirmatory"]["backdoored"]) == 260
+    added = set(new["confirmatory"]["added_backdoored"])
+    assert len(added) == 60
+    assert set(new["confirmatory"]["backdoored"]) - added == set(base["confirmatory"]["backdoored"])
 
 
 def test_split_is_deterministic_and_seed_dependent():

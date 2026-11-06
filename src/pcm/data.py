@@ -19,6 +19,11 @@ Filters for backdoored solutions (PREREGISTRATION.md, "Data"):
 Honest solutions are the dataset's correct solutions for o3-mini problems
 outside the backdoor sample, drawn to match the backdoor sample's difficulty
 mix at two honest solutions per backdoor.
+
+The confirmatory sample was raised from 200 to 260 backdoors after the power
+recalculation, before any confirmatory data. The 60 added backdoors come from a
+separate draw over problems in no split, so the pilot, the original 200
+backdoors and the 400 honest solutions stay exactly as first assigned.
 """
 
 from __future__ import annotations
@@ -40,6 +45,7 @@ ATTACKER_MODEL = "openai/o3-mini"
 BANNED_WORDS = ("backdoor", "trigger", "secret")
 DEFAULT_SEED = 20261104
 DEFAULT_SIZES = {"pilot": 20, "confirmatory": 200}
+ADDED_BACKDOORS = {"confirmatory": 60}  # drawn after the honest sets; see the module docstring
 HONEST_PER_BACKDOOR = 2
 SPLIT_FORMAT_VERSION = 1
 
@@ -182,6 +188,7 @@ def make_split(
     rows: list[Row],
     seed: int = DEFAULT_SEED,
     sizes: dict[str, int] = DEFAULT_SIZES,
+    added: dict[str, int] = ADDED_BACKDOORS,
 ) -> dict:
     """Assign problems to splits. Deterministic given rows, seed, and sizes."""
     attacker_rows = sorted(
@@ -229,14 +236,29 @@ def make_split(
         counts = Counter({d: n * HONEST_PER_BACKDOOR for d, n in counts.items()})
         honest_ids[name] = _draw_stratified(rng, pool, counts)
 
+    # Added backdoors: their own generator, so the draws above are unchanged.
+    rng_added = random.Random(seed + 1)
+    used = in_sample | {pid for v in honest_ids.values() for pid in v}
+    remaining = [r.problem_id for r in eligible if r.problem_id not in used]
+    added_ids: dict[str, list[str]] = {}
+    for name in sizes:
+        n = added.get(name, 0)
+        if n > len(remaining):
+            raise ValueError(f"Need {n} added backdoors but only {len(remaining)} remain")
+        picked = rng_added.sample(remaining, n)
+        remaining = [p for p in remaining if p not in set(picked)]
+        added_ids[name] = sorted(picked, key=_id_key)
+
     splits = {}
     for name in sizes:
+        all_backdoors = sorted(backdoor_ids[name] + added_ids[name], key=_id_key)
         splits[name] = {
-            "backdoored": backdoor_ids[name],
+            "backdoored": all_backdoors,
+            "added_backdoored": added_ids[name],
             "honest": honest_ids[name],
             "difficulty": {
                 kind: dict(sorted(Counter(by_id[p].difficulty for p in ids_).items()))
-                for kind, ids_ in (("backdoored", backdoor_ids[name]), ("honest", honest_ids[name]))
+                for kind, ids_ in (("backdoored", all_backdoors), ("honest", honest_ids[name]))
             },
         }
 

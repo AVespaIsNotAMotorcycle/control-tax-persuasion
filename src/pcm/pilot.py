@@ -117,7 +117,7 @@ def _key(item: Item) -> str:
     return f"{item.kind}:{item.problem_id}"
 
 
-FROZEN_PATHS = ("configs", "prompts", "src", "pyproject.toml")
+FROZEN_PATHS = ("configs", "prompts", "src", "pyproject.toml", "uv.lock")
 
 
 def freeze_problems(tag: str) -> list[str]:
@@ -334,6 +334,9 @@ def _finish_monitor(report, run_dir, label, acc, cfg, k, n_chunks):
     with open(run_dir / f"scores-{label}.jsonl", "w") as f:
         for row in acc["scored"]:
             f.write(json.dumps(row) + "\n")
+    (run_dir / f"paraphrases-{label}.json").write_text(json.dumps(
+        {f"{k}|{s}": [asdict(c) for c in p.comments] if p.comments else None
+         for (k, s), p in acc["paras"].items()}, indent=2))
     if acc["scored"]:
         report["monitors"][label] = {**_monitor_report(acc["scored"], acc["paras"], cfg, k),
                                      "chunks_done": acc["chunks_done"], "chunks": n_chunks}

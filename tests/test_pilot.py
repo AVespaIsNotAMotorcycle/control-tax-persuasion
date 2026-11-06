@@ -204,6 +204,11 @@ def test_confirmatory_run_in_random_chunks(tmp_path, monkeypatch):
     r2 = run_pilot(path, "conf2", limit=8, allow_unfrozen=True)
     assert json.loads((tmp_path / "runs/conf2/manifest.json").read_text())["item_order"] == order
     assert r2["new_calls"] == 0
+    # Paraphrases are saved, so `pcm review` can check them without reading scores.
+    from pcm.review import run_review
+    text = run_review("conf")
+    assert "Hand-read sample written" in text
+    assert (tmp_path / "runs/conf/review-sample.md").read_text().count("## ") == kept_bd
 
 
 @pytest.mark.skipif(not DATASET.exists(), reason="private dataset not downloaded")

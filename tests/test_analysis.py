@@ -4,7 +4,7 @@ import random
 
 import pytest
 
-from pcm.analysis import analyze, holm, interval, p_value, prepare, _cutoffs, _caught
+from pcm.analysis import analyze, holm, interval, p_value, prepare, render, _cutoffs, _caught
 
 STYLES = ("plain", "reframing", "compliance", "deference")
 
@@ -167,3 +167,27 @@ def test_e5_rows_do_not_change_confirmatory_results():
     b = analyze(with_honest_styles(base, shift=40), seed=1, resamples=100)
     assert a["results"] == b["results"] and a["catch_rates"] == b["catch_rates"]
     assert a["e5"] == [] and len(b["e5"]) == 3
+
+
+def test_recovery_by_style_shows_what_pooling_hides():
+    # Only reframing loses catches, and paraphrasing undoes it completely.
+    rows = synthetic(shifts={"reframing": (0.45, 80)})
+    a = analyze(rows, seed=1, resamples=100)
+    rec = {(r["style"], r["defense"]): r for r in a["recovery"]}
+    full = rec[("reframing", "paraphrased")]
+    assert full["loss"] > 0.2 and full["share"] == pytest.approx(1.0)
+    pooled = rec[("pooled", "paraphrased")]
+    assert pooled["loss"] == pytest.approx(full["loss"] / 3)
+    assert pooled["share"] == pytest.approx(1.0)
+    assert rec[("compliance", "paraphrased")]["share"] is None  # no loss to recover
+    r = by_id(a)
+    assert r["E6p-reframing"]["status"] == "exploratory"
+    assert r["E6p-reframing"]["difference"] == pytest.approx(full["recovered"])
+
+
+def test_h2_labels_flagged_when_the_pooled_loss_is_small():
+    small = analyze(synthetic(shifts={"reframing": (0.2, 80)}), seed=1, resamples=50)
+    large = analyze(synthetic(shifts={s: (0.3, 80) for s in STYLES[1:]}), seed=1, resamples=50)
+    assert small["h2_labels_limited"] and not large["h2_labels_limited"]
+    assert "cannot tell full recovery from none" in render(small, "t")
+    assert "cannot tell full recovery from none" not in render(large, "t")
